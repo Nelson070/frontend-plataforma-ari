@@ -1,0 +1,142 @@
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Mail, Lock, ArrowRight } from 'lucide-react';
+
+export default function Login() {
+  const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    // Aqui no futuro vai entrar a lógica de validação no banco!
+    navigate('/dashboard');
+  };
+
+  return (
+    <div className="min-h-screen flex font-sans">
+      
+      {/* LADO ESQUERDO: Formulário de Login */}
+      <div className="w-full lg:w-1/2 flex flex-col justify-center px-8 sm:px-16 md:px-24 xl:px-32 bg-white relative z-10">
+        
+        {/* Logo */}
+        <div className="absolute top-8 left-8 sm:top-12 sm:left-16 md:left-24 xl:left-32">
+          <Link to="/" className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-gradient-to-tr from-brand-orange to-orange-400 rounded-lg flex items-center justify-center shadow-md">
+              <span className="text-white font-black text-lg">A</span>
+            </div>
+            <span className="text-xl font-black text-slate-800 tracking-tight">
+              Portal<span className="text-brand-orange">Ari</span>
+            </span>
+          </Link>
+        </div>
+
+        <div className="max-w-md w-full mx-auto mt-16 lg:mt-0">
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight mb-2">
+            Bem-vindo de volta!
+          </h2>
+          <p className="text-slate-500 mb-8 text-lg">
+            Acesse sua conta para continuar sua jornada rumo à aprovação.
+          </p>
+
+          <form onSubmit={handleLogin} className="space-y-6">
+            
+            {/* Input E-mail */}
+            <div>
+              <label htmlFor="email" className="block text-sm font-semibold text-slate-700 mb-1.5">
+                E-mail
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Mail className="h-5 w-5 text-slate-400" />
+                </div>
+                <input
+                  id="email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="block w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all font-medium"
+                  placeholder="seu@email.com"
+                />
+              </div>
+            </div>
+
+            {/* Input Senha */}
+            <div>
+              <label htmlFor="password" className="block text-sm font-semibold text-slate-700 mb-1.5">
+                Senha
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Lock className="h-5 w-5 text-slate-400" />
+                </div>
+                <input
+                  id="password"
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="block w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all font-medium"
+                  placeholder="••••••••"
+                />
+              </div>
+            </div>
+
+            {/* Opções Extras */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <input
+                  id="remember-me"
+                  type="checkbox"
+                  className="h-4 w-4 text-brand-orange focus:ring-brand-orange border-slate-300 rounded cursor-pointer transition-colors"
+                />
+                <label htmlFor="remember-me" className="ml-2 block text-sm text-slate-600 cursor-pointer font-medium">
+                  Lembrar de mim
+                </label>
+              </div>
+
+              <a href="#" className="text-sm font-bold text-brand-orange hover:text-orange-600 transition-colors">
+                Esqueceu a senha?
+              </a>
+            </div>
+
+            {/* Botão de Entrar */}
+            <button
+              type="submit"
+              className="w-full flex items-center justify-center gap-2 py-4 px-4 bg-brand-orange hover:bg-orange-600 text-white text-base font-bold rounded-xl shadow-lg shadow-orange-200 hover:shadow-orange-300 transition-all active:scale-95 group"
+            >
+              Entrar na Plataforma
+              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            </button>
+
+          </form>
+
+          {/* Rodapé Formulário */}
+          <p className="mt-8 text-center text-sm text-slate-600 font-medium">
+            Ainda não é aluno?{' '}
+            <Link to="/pagamento" className="font-bold text-brand-orange hover:text-orange-600 transition-colors">
+              Matricule-se agora
+            </Link>
+          </p>
+        </div>
+      </div>
+
+      {/* LADO DIREITO: Imagem de Fundo (Oculto em telas menores) */}
+      <div className="hidden lg:flex lg:w-1/2 relative bg-slate-900 items-center justify-center overflow-hidden">
+        
+        <div className="absolute inset-0">
+          <img 
+            src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?q=80&w=1000&auto=format&fit=crop" 
+            alt="Estudantes focados" 
+            className="w-full h-full object-cover opacity-40"
+          />
+          {/* Overlay com gradiente elegante */}
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent"></div>
+        </div>
+
+      </div>
+
+    </div>
+  );
+}
