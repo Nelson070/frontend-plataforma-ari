@@ -43,7 +43,7 @@ const NICHES = [
   {
     id: 'Isolada de Matemática',
     title: 'Isolada de Matemática',
-    description: 'Aprofunde seus conhecimentos e domine a matemática com o Isodala.',
+    description: 'Aprofunde seus conhecimentos e domine a matemática com o Isolada.',
     icon: Sparkles,
     accent: 'emerald',
   }
