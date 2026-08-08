@@ -142,11 +142,11 @@ export default function LandingPage() {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 mb-6">
               <img 
                 src={logoAri} 
-                alt="Ícone Aritmática" 
+                alt="Ícone Arimatica " 
                 className="h-20 w-20 md:h-24 md:w-24 rounded-2xl object-cover border-2 border-brand-orange shadow-[0_0_20px_rgba(249,115,22,0.3)]" 
               />
               <h1 className="text-4xl md:text-5xl font-black text-white leading-tight tracking-wide sm:text-left text-center">
-                ARITMÁTICA<br />
+                ARIMATICA<br />
                 <span className="text-brand-orange">GABARITANDO</span>
               </h1>
             </div>

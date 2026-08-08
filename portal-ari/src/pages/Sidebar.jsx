@@ -40,12 +40,12 @@ export default function Sidebar() {
       <div className="h-20 flex items-center px-6 border-b border-slate-800/60 gap-3">
         <img 
           src={logoAri} 
-          alt="Logo Aritmática" 
+          alt="Logo Arimatica Gabaritando" 
           className="h-10 w-10 object-cover rounded-xl border border-brand-orange/50 shadow-md" 
         />
         <div className="flex flex-col">
           <span className="text-sm font-black text-white tracking-wide leading-none mb-1">
-            ARITMÁTICA
+            ARIMATICA
           </span>
           <span className="text-[11px] font-black text-brand-orange tracking-widest leading-none">
             GABARITANDO
