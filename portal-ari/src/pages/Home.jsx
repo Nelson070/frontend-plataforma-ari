@@ -167,7 +167,7 @@ export default function LandingPage() {
             </motion.h2>
 
             <motion.p variants={fadeUp}>
-              Você acaba de entrar em um ambiente criado especialmente para tornar seus estudos mais eficientes, organizados e objetivos. Na Plataforma Aritmatica Gabaritando, você encontrará conteúdos de alta qualidade, materiais cuidadosamente elaborados, <strong className="text-white">banco de questões, questões comentadas, simulados, LIVES, Videoaulas</strong> e recursos que irão fortalecer seu aprendizado e acelerar sua preparação.
+              Você acaba de entrar em um ambiente criado especialmente para tornar seus estudos mais eficientes, organizados e objetivos. Na Plataforma Arimatica Gabaritando, você encontrará conteúdos de alta qualidade, materiais cuidadosamente elaborados, <strong className="text-white">banco de questões, questões comentadas, simulados, LIVES, Videoaulas</strong> e recursos que irão fortalecer seu aprendizado e acelerar sua preparação.
             </motion.p>
 
             <motion.p variants={fadeUp}>
@@ -235,7 +235,7 @@ export default function LandingPage() {
             </p>
           </motion.div>
 
-          <motion.div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" variants={staggerContainer}>
+          <motion.div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" variants={staggerContainer}>
             {NICHES.map((niche) => {
               const Icon = niche.icon;
               const styles = ACCENT_STYLES[niche.accent];

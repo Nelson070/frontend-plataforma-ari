@@ -36,7 +36,6 @@ export default function Sidebar() {
   return (
     <aside className="w-64 bg-slate-950 flex-col hidden lg:flex shrink-0">
       
-      {/* LOGO E TEXTO ALINHADOS LADO A LADO 👇 */}
       <div className="h-20 flex items-center px-6 border-b border-slate-800/60 gap-3">
         <img 
           src={logoAri} 
