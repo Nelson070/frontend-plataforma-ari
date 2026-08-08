@@ -41,8 +41,8 @@ const NICHES = [
     accent: 'purple',
   },
   {
-    id: 'Isodala de Matemática',
-    title: 'Isodala de Matemática',
+    id: 'Isolada de Matemática',
+    title: 'Isolada de Matemática',
     description: 'Aprofunde seus conhecimentos e domine a matemática com o Isodala.',
     icon: Sparkles,
     accent: 'emerald',
