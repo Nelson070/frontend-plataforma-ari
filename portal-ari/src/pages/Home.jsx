@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Target, BookOpen, GraduationCap, Calculator, ChevronRight, Quote, Sparkles } from 'lucide-react';
+import { Target, BookOpen, GraduationCap, Calculator, ChevronRight, Quote, Sparkles, Atom } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 import logoAri from '../assets/logo-ari.jpeg';
@@ -41,10 +41,10 @@ const NICHES = [
     accent: 'purple',
   },
   {
-    id: 'Isolada de Matemática',
+    id: 'isolada-de-matematica',
     title: 'Isolada de Matemática',
     description: 'Aprofunde seus conhecimentos e domine a matemática com o Isolada.',
-    icon: Sparkles,
+    icon: Atom,
     accent: 'emerald',
   }
 ];

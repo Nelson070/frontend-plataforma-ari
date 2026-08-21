@@ -1,214 +1,285 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { 
-  ArrowLeft, Save, FileQuestion, BookOpen, 
-  Target, AlignLeft, CheckCircle2, MessageSquare, LayoutDashboard, ChevronDown
-} from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabaseClient';
+import { Save, PlusCircle, ArrowLeft, Loader2, CheckCircle2, ImagePlus, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
+
+
 
 export default function AdminNovaQuestao() {
-  const navigate = useNavigate();
-  const [gabarito, setGabarito] = useState('A');
+  const [turmas, setTurmas] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [sucesso, setSucesso] = useState(false);
+
+  // Estados do Formulário
+  const [turmaId, setTurmaId] = useState('');
+  const [materia, setMateria] = useState('');
+  const [assunto, setAssunto] = useState('');
+  const [dificuldade, setDificuldade] = useState('medio');
+  const [enunciado, setEnunciado] = useState('');
+  const [comentario, setComentario] = useState('');
+  const [respostaCorreta, setRespostaCorreta] = useState('A');
+  const [ano, setAno] = useState(new Date().getFullYear());
+  const [banca, setBanca] = useState('Inédita');
+  
+  // Estado para a Imagem
+  const [imagemFile, setImagemFile] = useState(null);
+  const [imagemPreview, setImagemPreview] = useState(null);
+
+  // Alternativas
+  const [altA, setAltA] = useState('');
+  const [altB, setAltB] = useState('');
+  const [altC, setAltC] = useState('');
+  const [altD, setAltD] = useState('');
+  const [altE, setAltE] = useState('');
+
+  useEffect(() => {
+    async function fetchTurmas() {
+      const { data, error } = await supabase.from('turmas').select('*');
+      if (!error && data) {
+        setTurmas(data);
+        if (data.length > 0) setTurmaId(data[0].id);
+      }
+    }
+    fetchTurmas();
+  }, []);
+
+  const handleImagemChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setImagemFile(file);
+      // Cria uma URL local só para mostrar a pré-visualização para o Ari
+      setImagemPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const removeImagem = () => {
+    setImagemFile(null);
+    setImagemPreview(null);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setSucesso(false);
+
+    try {
+      let imagemUrl = null;
+
+      // 1. Se tiver imagem, fazemos o upload primeiro
+      if (imagemFile) {
+        // Cria um nome único para o arquivo para não dar conflito
+        const fileExt = imagemFile.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const filePath = `${turmaId}/${fileName}`; // Organiza em pastas por turma
+
+        const { error: uploadError } = await supabase.storage
+          .from('questoes_imagens')
+          .upload(filePath, imagemFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data } = supabase.storage
+          .from('questoes_imagens')
+          .getPublicUrl(filePath);
+
+        imagemUrl = data.publicUrl;
+      }
+
+      const alternativasFormatadas = [
+        { letra: 'A', texto: altA },
+        { letra: 'B', texto: altB },
+        { letra: 'C', texto: altC },
+        { letra: 'D', texto: altD },
+        { letra: 'E', texto: altE }
+      ];
+
+      // 3. Salva a questão inteira no banco
+      const { error } = await supabase.from('questoes').insert([
+        {
+          turma_id: turmaId,
+          materia,
+          assunto,
+          dificuldade,
+          enunciado,
+          alternativas: alternativasFormatadas,
+          resposta_correta: respostaCorreta,
+          comentario,
+          ano: parseInt(ano),
+          banca,
+          imagem_url: imagemUrl // Nova coluna de imagem sendo enviada!
+        }
+      ]);
+
+      if (error) throw error;
+
+      setSucesso(true);
+      
+      // Limpar o formulário para a próxima questão
+      setEnunciado('');
+      setAltA(''); setAltB(''); setAltC(''); setAltD(''); setAltE('');
+      setComentario('');
+      removeImagem();
+      
+      setTimeout(() => setSucesso(false), 3000);
+
+    } catch (error) {
+      console.error('Erro ao salvar questão:', error.message);
+      alert('Erro ao salvar a questão. Verifique o console.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="flex h-screen bg-[#f8fafc] font-sans text-slate-800 overflow-hidden">
-      
-      {/* SIDEBAR DO ADMIN */}
-      <aside className="w-64 bg-[#1e2330] text-slate-400 flex flex-col hidden lg:flex shrink-0">
-        <div className="h-20 flex items-center px-6 border-b border-slate-700/50">
-          <h1 className="text-2xl font-black text-white tracking-tight">
-            Admin<span className="text-brand-orange">Ari</span>
-          </h1>
+    <div className="min-h-screen bg-slate-50 p-6 md:p-8 font-sans">
+      <div className="max-w-4xl mx-auto">
+        
+        <div className="flex items-center gap-4 mb-8">
+          <Link to="/dashboard" className="p-2 bg-white rounded-xl shadow-sm border border-slate-200 hover:bg-slate-50 transition-colors">
+            <ArrowLeft className="w-5 h-5 text-slate-600" />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">
+              <PlusCircle className="w-6 h-6 text-brand-orange" />
+              Adicionar Nova Questão
+            </h1>
+            <p className="text-sm text-slate-500 font-medium mt-1">Alimente o banco de questões da plataforma.</p>
+          </div>
         </div>
-        
-        <nav className="flex-1 px-4 py-8 space-y-2">
-          <Link to="/admin" className="flex items-center px-4 py-3 hover:bg-slate-800 hover:text-white rounded-xl font-medium transition-all group">
-            <LayoutDashboard className="w-5 h-5 mr-3 group-hover:text-brand-orange transition-colors" /> Visão Geral
-          </Link>
-          <Link to="#" className="flex items-center px-4 py-3 bg-brand-orange text-white rounded-xl font-bold transition-all shadow-md shadow-brand-orange/20">
-            <FileQuestion className="w-5 h-5 mr-3" /> Questões
-          </Link>
-        </nav>
-      </aside>
 
-      {/* ÁREA PRINCIPAL */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        
-        {/* HEADER DA PÁGINA */}
-        <header className="h-20 bg-white border-b border-slate-200 px-6 md:px-8 flex items-center shrink-0">
-          <button 
-            onClick={() => navigate('/admin')}
-            className="flex items-center text-sm font-semibold text-slate-500 hover:text-brand-orange transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Voltar para o Painel
-          </button>
-        </header>
+        {sucesso && (
+          <div className="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-700 p-4 rounded-xl flex items-center gap-3 font-bold">
+            <CheckCircle2 className="w-6 h-6" />
+            Questão salva com sucesso no banco de dados!
+          </div>
+        )}
 
-        {/* CONTEÚDO SCROLLÁVEL - O FORMULÁRIO */}
-        <div className="flex-1 overflow-y-auto p-6 md:p-10 custom-scrollbar">
-          <div className="max-w-4xl mx-auto">
-            
-            {/* Título da Página */}
-            <div className="mb-8 flex items-center gap-4">
-              <div className="w-12 h-12 bg-brand-orange text-white rounded-xl flex items-center justify-center shadow-lg shadow-brand-orange/20">
-                <FileQuestion className="w-6 h-6" />
-              </div>
+        <form onSubmit={handleSubmit} className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200 shadow-sm space-y-8">
+          
+          {/* BLOCO 1: Classificação */}
+          <div>
+            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Classificação</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-                  Cadastrar Nova Questão
-                </h2>
-                <p className="text-sm text-slate-500 mt-1 font-medium">
-                  Preencha os dados abaixo para adicionar uma nova questão ao banco.
-                </p>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Turma / Nicho</label>
+                <select value={turmaId} onChange={(e) => setTurmaId(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 font-medium">
+                  {turmas.map(t => (
+                    <option key={t.id} value={t.id}>{t.nome}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Matéria</label>
+                <input required type="text" value={materia} onChange={(e) => setMateria(e.target.value)} placeholder="Ex: Matemática" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 font-medium" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Assunto</label>
+                <input required type="text" value={assunto} onChange={(e) => setAssunto(e.target.value)} placeholder="Ex: Geometria Plana" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 font-medium" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Dificuldade</label>
+                <select value={dificuldade} onChange={(e) => setDificuldade(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 font-medium">
+                  <option value="facil">Fácil</option>
+                  <option value="medio">Médio</option>
+                  <option value="dificil">Difícil</option>
+                </select>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+               <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Banca (Opcional)</label>
+                <input type="text" value={banca} onChange={(e) => setBanca(e.target.value)} placeholder="Ex: INEP, FGV..." className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 font-medium" />
+              </div>
+               <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Ano (Opcional)</label>
+                <input type="number" value={ano} onChange={(e) => setAno(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 font-medium" />
+              </div>
+            </div>
+          </div>
+
+          {/* BLOCO 2: Enunciado e Imagem */}
+          <div>
+            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Conteúdo da Questão</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Enunciado</label>
+                <textarea required value={enunciado} onChange={(e) => setEnunciado(e.target.value)} rows="4" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 font-medium resize-y" placeholder="Escreva o texto da questão aqui..."></textarea>
+              </div>
+
+              {/* UPLOAD DE IMAGEM */}
+              <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl p-6 transition-all hover:bg-slate-100">
+                {!imagemPreview ? (
+                  <label className="flex flex-col items-center justify-center cursor-pointer h-full">
+                    <ImagePlus className="w-10 h-10 text-slate-400 mb-3" />
+                    <span className="text-sm font-bold text-slate-700">Adicionar Imagem ou Gráfico</span>
+                    <span className="text-xs text-slate-500 mt-1">PNG, JPG ou WEBP</span>
+                    <input type="file" accept="image/*" onChange={handleImagemChange} className="hidden" />
+                  </label>
+                ) : (
+                  <div className="relative inline-block w-full max-w-sm">
+                    <img src={imagemPreview} alt="Preview" className="rounded-xl border border-slate-200 object-contain max-h-64 mx-auto" />
+                    <button type="button" onClick={removeImagem} className="absolute -top-3 -right-3 bg-red-500 hover:bg-red-600 text-white rounded-full p-1.5 shadow-lg transition-colors">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* BLOCO 3: Alternativas */}
+          <div>
+            <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-2">
+              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Alternativas</h3>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-bold text-slate-600">Gabarito Correto:</span>
+                <select value={respostaCorreta} onChange={(e) => setRespostaCorreta(e.target.value)} className="p-2 bg-brand-orange text-white rounded-lg font-bold outline-none cursor-pointer">
+                  <option value="A">Letra A</option>
+                  <option value="B">Letra B</option>
+                  <option value="C">Letra C</option>
+                  <option value="D">Letra D</option>
+                  <option value="E">Letra E</option>
+                </select>
               </div>
             </div>
 
-            <form className="space-y-6">
-              
-              {/* BLOCO 1: Classificação */}
-              <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-                <div className="flex items-center gap-2 mb-6 border-b border-slate-100 pb-4">
-                  <BookOpen className="w-5 h-5 text-brand-orange" />
-                  <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-                    1. Classificação da Questão
-                  </h3>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="relative">
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Matéria</label>
-                    <select className="w-full bg-slate-50 border border-slate-300 text-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/20 font-medium appearance-none transition-all">
-                      <option>Matemática e suas Tecnologias</option>
-                      <option>Raciocínio Lógico</option>
-                    </select>
-                    <ChevronDown className="absolute right-4 top-[2.4rem] w-4 h-4 text-slate-400 pointer-events-none" />
+            <div className="space-y-3">
+              {[
+                { letra: 'A', state: altA, set: setAltA },
+                { letra: 'B', state: altB, set: setAltB },
+                { letra: 'C', state: altC, set: setAltC },
+                { letra: 'D', state: altD, set: setAltD },
+                { letra: 'E', state: altE, set: setAltE },
+              ].map((item) => (
+                <div key={item.letra} className="flex items-center gap-3">
+                  <div className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center font-black text-sm transition-colors ${respostaCorreta === item.letra ? 'bg-brand-orange text-white' : 'bg-slate-100 text-slate-500'}`}>
+                    {item.letra}
                   </div>
-                  <div className="relative">
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Assunto (Tópico)</label>
-                    <select className="w-full bg-slate-50 border border-slate-300 text-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/20 font-medium appearance-none transition-all">
-                      <option>Probabilidade</option>
-                      <option>Geometria Plana</option>
-                      <option>Análise Combinatória</option>
-                      <option>Estatística</option>
-                    </select>
-                    <ChevronDown className="absolute right-4 top-[2.4rem] w-4 h-4 text-slate-400 pointer-events-none" />
-                  </div>
-                  <div className="relative">
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Dificuldade</label>
-                    <select className="w-full bg-slate-50 border border-slate-300 text-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/20 font-medium appearance-none transition-all">
-                      <option>Fácil</option>
-                      <option>Médio</option>
-                      <option>Difícil</option>
-                    </select>
-                    <ChevronDown className="absolute right-4 top-[2.4rem] w-4 h-4 text-slate-400 pointer-events-none" />
-                  </div>
+                  <input required type="text" value={item.state} onChange={(e) => item.set(e.target.value)} placeholder={`Texto da alternativa ${item.letra}...`} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 font-medium" />
                 </div>
-              </div>
-
-              {/* BLOCO 2: Enunciado */}
-              <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-                <div className="flex items-center gap-2 mb-6 border-b border-slate-100 pb-4">
-                  <AlignLeft className="w-5 h-5 text-brand-orange" />
-                  <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-                    2. Enunciado
-                  </h3>
-                </div>
-                <div>
-                  <textarea 
-                    rows="5" 
-                    className="w-full bg-slate-50 border border-slate-300 text-slate-800 rounded-xl px-4 py-4 focus:outline-none focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/20 font-medium resize-none transition-all"
-                    placeholder="Digite o texto da questão aqui..."
-                  ></textarea>
-                </div>
-              </div>
-
-              {/* BLOCO 3: Alternativas e Gabarito */}
-              <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-                <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
-                  <div className="flex items-center gap-2">
-                    <Target className="w-5 h-5 text-brand-orange" />
-                    <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-                      3. Alternativas & Gabarito
-                    </h3>
-                  </div>
-                  <span className="text-xs font-bold text-brand-orange bg-orange-50 border border-orange-100 px-3 py-1 rounded-full">
-                    Marque a opção correta
-                  </span>
-                </div>
-                
-                <div className="space-y-4">
-                  {['A', 'B', 'C', 'D', 'E'].map((letra) => (
-                    <div 
-                      key={letra} 
-                      onClick={() => setGabarito(letra)}
-                      className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer group ${
-                        gabarito === letra 
-                          ? 'border-brand-orange bg-orange-50/30 shadow-sm' 
-                          : 'border-slate-200 hover:border-brand-orange/40 bg-white'
-                      }`}
-                    >
-                      {/* Radio Button Customizado */}
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center border-2 transition-colors shrink-0 ${
-                        gabarito === letra 
-                          ? 'bg-brand-orange border-brand-orange text-white' 
-                          : 'border-slate-300 text-transparent group-hover:border-brand-orange/40'
-                      }`}>
-                        <CheckCircle2 className="w-4 h-4" />
-                      </div>
-                      
-                      <div className="w-10 h-10 rounded-lg bg-slate-100 text-slate-700 font-black flex items-center justify-center shrink-0 group-hover:bg-slate-200 transition-colors">
-                        {letra}
-                      </div>
-                      
-                      <input 
-                        type="text" 
-                        onClick={(e) => e.stopPropagation()} // Evita marcar o radio ao clicar para digitar
-                        className="w-full bg-transparent border-none px-2 py-2 focus:outline-none text-slate-800 font-medium placeholder-slate-400"
-                        placeholder={`Texto da alternativa ${letra}...`}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* BLOCO 4: Resolução Comentada (Opcional) */}
-              <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-                <div className="flex items-center gap-2 mb-6 border-b border-slate-100 pb-4">
-                  <MessageSquare className="w-5 h-5 text-brand-orange" />
-                  <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-                    4. Resolução Comentada <span className="text-slate-400 font-medium normal-case tracking-normal">(Opcional)</span>
-                  </h3>
-                </div>
-                <div>
-                  <textarea 
-                    rows="3" 
-                    className="w-full bg-slate-50 border border-slate-300 text-slate-800 rounded-xl px-4 py-4 focus:outline-none focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/20 font-medium resize-none transition-all"
-                    placeholder="Explique o passo a passo para chegar na resposta..."
-                  ></textarea>
-                </div>
-              </div>
-
-              {/* RODAPÉ DO FORMULÁRIO (Botões de Ação) */}
-              <div className="flex items-center justify-end gap-4 pt-2 pb-12">
-                <button 
-                  type="button" 
-                  onClick={() => navigate('/admin')}
-                  className="px-6 py-3.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl font-bold transition-all"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  type="button" 
-                  className="flex items-center gap-2 px-8 py-3.5 bg-brand-orange hover:bg-orange-600 text-white rounded-xl font-bold transition-all shadow-lg shadow-brand-orange/20 active:scale-95"
-                >
-                  <Save className="w-5 h-5" /> Salvar Questão
-                </button>
-              </div>
-
-            </form>
+              ))}
+            </div>
           </div>
-        </div>
-      </main>
+
+          {/* BLOCO 4: Comentário do Professor */}
+          <div>
+            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Resolução (Opcional)</h3>
+            <textarea value={comentario} onChange={(e) => setComentario(e.target.value)} rows="3" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 font-medium resize-y" placeholder="Explique o passo a passo da resposta correta..."></textarea>
+          </div>
+
+          <div className="pt-4 flex justify-end">
+            <button disabled={loading} type="submit" className="flex items-center gap-2 px-8 py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold transition-all disabled:opacity-70">
+              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+              {loading ? 'Salvando...' : 'Salvar Questão'}
+            </button>
+          </div>
+
+        </form>
+      </div>
     </div>
   );
 }

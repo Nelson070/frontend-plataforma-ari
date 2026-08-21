@@ -3,13 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronRight, Award, Flame, PlayCircle as PlayIcon, FileText, Target, TrendingUp, Calendar } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Sidebar from './Sidebar';
+import { useAuth } from '../hooks/useAuth';
 
 const QUICK_ACCESS = [
   {
     to: '/banco-questoes',
     icon: FileText,
     title: 'Banco de Questões',
-    description: 'Mais de 25.000 questões focadas na sua área.',
+    description: 'Questões focadas na sua área.',
     cta: 'Acessar',
   },
   {
@@ -37,6 +38,12 @@ const QUICK_ACCESS = [
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { profile } = useAuth();
+
+  const nome = profile?.nome || 'Concurseiro(a)';
+  const primeiroNome = nome.split(' ')[0];
+  const inicial = nome.charAt(0).toUpperCase();
+  const turmaNome = profile?.turmas?.nome || '—';
 
   const fadeUp = {
     hidden: { opacity: 0, y: 16 },
@@ -60,7 +67,7 @@ export default function Dashboard() {
         <header className="h-16 bg-white border-b border-slate-200 px-6 md:px-8 flex justify-between items-center shrink-0">
           <div>
             <h2 className="text-lg font-black text-slate-900 leading-tight">Visão Geral</h2>
-            <p className="text-xs font-medium text-slate-500">Turma: Concursos Públicos</p>
+            <p className="text-xs font-medium text-slate-500">Turma: {turmaNome}</p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -69,7 +76,7 @@ export default function Dashboard() {
               <span className="text-xs font-bold text-brand-orange">12 dias seguidos</span>
             </div>
             <div className="w-9 h-9 bg-slate-900 rounded-full flex items-center justify-center text-white font-bold text-xs cursor-pointer hover:bg-slate-800 transition-colors">
-              C
+              {inicial}
             </div>
           </div>
         </header>
@@ -88,7 +95,7 @@ export default function Dashboard() {
 
               <div className="md:col-span-2 bg-slate-950 rounded-3xl p-6 md:p-7 text-white flex flex-col justify-between">
                 <div>
-                  <h2 className="text-xl md:text-2xl font-black mb-1">Bora gabaritar hoje?</h2>
+                  <h2 className="text-xl md:text-2xl font-black mb-1">Bora gabaritar hoje, {primeiroNome}?</h2>
                   <p className="text-slate-400 text-sm font-medium mb-5">
                     Sua última aula foi sobre Tabela-Verdade. Vamos continuar?
                   </p>
@@ -131,9 +138,7 @@ export default function Dashboard() {
             </motion.div>
 
             {/* Atalhos */}
-            
             <motion.div variants={fadeUp}>
-              
               <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 px-1">
                 Atalhos
               </h3>
