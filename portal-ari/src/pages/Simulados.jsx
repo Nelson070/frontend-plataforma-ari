@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { ArrowLeft, Clock, PlayCircle, AlertCircle, CheckCircle2, XCircle, ChevronRight, ChevronLeft, Loader2, Target } from 'lucide-react';
+import { ArrowLeft, Clock, PlayCircle, AlertCircle, CheckCircle2, XCircle, ChevronRight, ChevronLeft, Loader2, Target, PlusCircle, BookOpen } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useGamificacao } from '../hooks/useGamificacao';
 
@@ -9,9 +9,16 @@ export default function Simulados() {
   
   // Estados Gerais
   const [loading, setLoading] = useState(true);
+  const [abaAtual, setAbaAtual] = useState('oficiais'); // 'oficiais' ou 'criar'
   const [listaSimulados, setListaSimulados] = useState([]);
   const [simuladoAtivo, setSimuladoAtivo] = useState(null);
   
+  // Estados para Criação de Simulado Personalizado
+  const [materiasDisponiveis, setMateriasDisponiveis] = useState([]);
+  const [materiaSelecionada, setMateriaSelecionada] = useState('');
+  const [qtdQuestoes, setQtdQuestoes] = useState(10);
+  const [criandoProva, setCriandoProva] = useState(false);
+
   // Estados da Prova
   const [questoes, setQuestoes] = useState([]);
   const [indiceAtual, setIndiceAtual] = useState(0);
@@ -20,12 +27,12 @@ export default function Simulados() {
   const [finalizado, setFinalizado] = useState(false);
   const [resultado, setResultado] = useState({ acertos: 0, total: 0 });
 
-  // Hook de Gamificação (para atualizar o XP depois)
+  // Hook de Gamificação
   const { xp, recarregar } = useGamificacao();
 
-  // 1. CARREGAR A LISTA DE SIMULADOS DA TURMA
+  // 1. CARREGAR DADOS INICIAIS (Simulados e Matérias do Banco)
   useEffect(() => {
-    async function carregarSimulados() {
+    async function carregarDados() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return navigate('/login');
@@ -37,22 +44,34 @@ export default function Simulados() {
           .single();
 
         if (profile?.turma_id) {
-          const { data, error } = await supabase
+          // Busca simulados da turma
+          const { data: sims, error: errSim } = await supabase
             .from('simulados')
             .select('*')
             .eq('turma_id', profile.turma_id)
             .order('created_at', { ascending: false });
 
-          if (error) throw error;
-          setListaSimulados(data || []);
+          if (errSim) throw errSim;
+          setListaSimulados(sims || []);
+
+          // Busca matérias únicas cadastradas nas questões para o filtro do aluno
+          const { data: questoesBanco, error: errQ } = await supabase
+            .from('questoes')
+            .select('materia');
+
+          if (!errQ && questoesBanco) {
+            const unicas = [...new Set(questoesBanco.map(q => q.materia))].filter(Boolean);
+            setMateriasDisponiveis(unicas);
+            if (unicas.length > 0) setMateriaSelecionada(unicas[0]);
+          }
         }
       } catch (error) {
-        console.error('Erro ao carregar simulados:', error.message);
+        console.error('Erro ao carregar dados:', error.message);
       } finally {
         setLoading(false);
       }
     }
-    carregarSimulados();
+    carregarDados();
   }, [navigate]);
 
   // 2. CRONÔMETRO
@@ -62,7 +81,7 @@ export default function Simulados() {
       intervalo = setInterval(() => {
         setTempoRestante((prev) => {
           if (prev <= 1) {
-            finalizarProva(true); // Força a entrega se o tempo acabar
+            finalizarProva(true);
             return 0;
           }
           return prev - 1;
@@ -72,11 +91,10 @@ export default function Simulados() {
     return () => clearInterval(intervalo);
   }, [simuladoAtivo, finalizado, tempoRestante]);
 
-  // 3. INICIAR O SIMULADO
+  // 3. INICIAR SIMULADO OFICIAL
   const iniciarSimulado = async (simulado) => {
     setLoading(true);
     try {
-      // Busca as questões vinculadas a este simulado
       const { data, error } = await supabase
         .from('simulado_questoes')
         .select('questoes(*)')
@@ -85,20 +103,91 @@ export default function Simulados() {
 
       if (error) throw error;
 
-      const formatadas = data.map(item => item.questoes);
+      const formatadas = data.map(item => item.questoes).filter(Boolean);
       
       setQuestoes(formatadas);
       setSimuladoAtivo(simulado);
-      setTempoRestante(simulado.tempo_minutos * 60); // Converte minutos para segundos
+      setTempoRestante(simulado.tempo_minutos * 60);
       setRespostas({});
       setIndiceAtual(0);
       setFinalizado(false);
-
     } catch (error) {
       console.error('Erro ao carregar questões:', error.message);
       alert('Erro ao carregar a prova.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 3.1 GERAR SIMULADO PERSONALIZADO PELO ALUNO
+  const gerarSimuladoPersonalizado = async (e) => {
+    e.preventDefault();
+    if (!materiaSelecionada) return alert('Selecione uma matéria/assunto.');
+
+    setCriandoProva(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('turma_id')
+        .eq('id', user.id)
+        .single();
+
+      // Busca questões aleatórias da matéria escolhida
+      const { data: questoesEncontradas, error: errQ } = await supabase
+        .from('questoes')
+        .select('*')
+        .eq('materia', materiaSelecionada)
+        .limit(Number(qtdQuestoes));
+
+      if (errQ) throw errQ;
+      if (!questoesEncontradas || questoesEncontradas.length === 0) {
+        alert('Não há questões suficientes cadastradas para este assunto.');
+        setCriandoProva(false);
+        return;
+      }
+
+      // Cria o registro do simulado "personalizado" no banco (liberado pela nossa migration!)
+      const { data: novoSimulado, error: errSim } = await supabase
+        .from('simulados')
+        .insert({
+          titulo: `Treino Personalizado: ${materiaSelecionada}`,
+          descricao: `Simulado gerado automaticamente por assunto.`,
+          turma_id: profile.turma_id,
+          tipo: 'assunto',
+          tempo_minutos: qtdQuestoes * 3 // 3 minutos por questão em média
+        })
+        .select()
+        .single();
+
+      if (errSim) throw errSim;
+
+      // Vincula as questões na tabela relacional simulado_questoes
+      const vinculos = questoesEncontradas.map((q, index) => ({
+        simulado_id: novoSimulado.id,
+        questao_id: q.id,
+        ordem: index + 1
+      }));
+
+      const { error: errVinc } = await supabase
+        .from('simulado_questoes')
+        .insert(vinculos);
+
+      if (errVinc) throw errVinc;
+
+      // Inicia a prova imediatamente para o aluno
+      setQuestoes(questoesEncontradas);
+      setSimuladoAtivo(novoSimulado);
+      setTempoRestante(novoSimulado.tempo_minutos * 60);
+      setRespostas({});
+      setIndiceAtual(0);
+      setFinalizado(false);
+
+    } catch (error) {
+      console.error('Erro ao gerar simulado:', error.message);
+      alert('Erro ao criar o simulado personalizado.');
+    } finally {
+      setCriandoProva(false);
     }
   };
 
@@ -126,7 +215,7 @@ export default function Simulados() {
     setResultado({ acertos, total: questoes.length });
     setFinalizado(true);
     
-    // Bônus de XP: 10 XP por questão certa (Gamificação!)
+    // Bônus de XP: 10 XP por questão certa
     if (acertos > 0) {
       try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -143,7 +232,6 @@ export default function Simulados() {
     setLoading(false);
   };
 
-  // Formatação do tempo (MM:SS)
   const formatarTempo = (segundos) => {
     const h = Math.floor(segundos / 3600);
     const m = Math.floor((segundos % 3600) / 60);
@@ -161,7 +249,7 @@ export default function Simulados() {
   }
 
   // ==========================================
-  // TELA 1: LISTA DE SIMULADOS (LOBBY)
+  // TELA 1: LOBBY DE SIMULADOS (Com Abas)
   // ==========================================
   if (!simuladoAtivo) {
     return (
@@ -174,43 +262,115 @@ export default function Simulados() {
             <div>
               <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">
                 <Target className="w-6 h-6 text-brand-orange" />
-                Simulados Inéditos
+                Simulados & Treinos
               </h1>
-              <p className="text-sm text-slate-500 font-medium mt-1">Teste seus conhecimentos e simule o dia da prova.</p>
+              <p className="text-sm text-slate-500 font-medium mt-1">Resolva provas oficiais da turma ou monte seu próprio treino por assunto.</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {listaSimulados.length === 0 ? (
-              <div className="col-span-full bg-white rounded-3xl p-12 text-center border border-slate-200">
-                <Target className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                <h3 className="text-xl font-bold text-slate-700">Nenhum simulado disponível</h3>
-                <p className="text-slate-500 mt-2">O professor ainda está preparando as provas para a sua turma.</p>
-              </div>
-            ) : (
-              listaSimulados.map((simulado) => (
-                <div key={simulado.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                  <div>
-                    <div className="flex justify-between items-start mb-4">
-                      <h3 className="text-lg font-black text-slate-900 leading-tight">{simulado.titulo}</h3>
-                      <div className="flex items-center gap-1.5 px-3 py-1 bg-orange-50 text-brand-orange rounded-lg text-xs font-bold">
-                        <Clock className="w-3.5 h-3.5" />
-                        {simulado.tempo_minutos} min
-                      </div>
-                    </div>
-                    {simulado.descricao && <p className="text-sm text-slate-500 font-medium mb-6">{simulado.descricao}</p>}
-                  </div>
-                  <button
-                    onClick={() => iniciarSimulado(simulado)}
-                    className="w-full flex items-center justify-center gap-2 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold transition-all"
-                  >
-                    <PlayCircle className="w-5 h-5" />
-                    Iniciar Prova
-                  </button>
-                </div>
-              ))
-            )}
+          {/* Abas de Navegação */}
+          <div className="flex p-1 bg-white border border-slate-200 rounded-2xl w-fit mb-6 shadow-sm">
+            <button
+              onClick={() => setAbaAtual('oficiais')}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                abaAtual === 'oficiais' ? 'bg-brand-orange text-white shadow-md' : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              <Target className="w-4 h-4" /> Simulados Oficiais
+            </button>
+            <button
+              onClick={() => setAbaAtual('criar')}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                abaAtual === 'criar' ? 'bg-brand-orange text-white shadow-md' : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              <PlusCircle className="w-4 h-4" /> Criar por Assunto
+            </button>
           </div>
+
+          {/* CONTEÚDO DA ABA: OFICIAIS */}
+          {abaAtual === 'oficiais' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {listaSimulados.length === 0 ? (
+                <div className="col-span-full bg-white rounded-3xl p-12 text-center border border-slate-200">
+                  <Target className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-slate-700">Nenhum simulado oficial disponível</h3>
+                  <p className="text-slate-500 mt-2">O professor ainda não publicou provas para a sua turma.</p>
+                </div>
+              ) : (
+                listaSimulados.map((simulado) => (
+                  <div key={simulado.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <div className="flex justify-between items-start mb-4">
+                        <h3 className="text-lg font-black text-slate-900 leading-tight">{simulado.titulo}</h3>
+                        <div className="flex items-center gap-1.5 px-3 py-1 bg-orange-50 text-brand-orange rounded-lg text-xs font-bold shrink-0">
+                          <Clock className="w-3.5 h-3.5" />
+                          {simulado.tempo_minutos} min
+                        </div>
+                      </div>
+                      {simulado.descricao && <p className="text-sm text-slate-500 font-medium mb-6">{simulado.descricao}</p>}
+                    </div>
+                    <button
+                      onClick={() => iniciarSimulado(simulado)}
+                      className="w-full flex items-center justify-center gap-2 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold transition-all"
+                    >
+                      <PlayCircle className="w-5 h-5" />
+                      Iniciar Prova
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* CONTEÚDO DA ABA: CRIAR POR ASSUNTO */}
+          {abaAtual === 'criar' && (
+            <div className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200 shadow-sm max-w-xl">
+              <h3 className="text-lg font-black text-slate-900 mb-2 flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-brand-orange" /> Gerar Treino Personalizado
+              </h3>
+              <p className="text-sm text-slate-500 mb-6">Escolha a matéria que você deseja focar e o número de questões para praticar agora.</p>
+
+              <form onSubmit={gerarSimuladoPersonalizado} className="space-y-5">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Matéria / Assunto</label>
+                  <select
+                    value={materiaSelecionada}
+                    onChange={(e) => setMateriaSelecionada(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                  >
+                    {materiasDisponiveis.map((mat) => (
+                      <option key={mat} value={mat}>{mat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Quantidade de Questões</label>
+                  <select
+                    value={qtdQuestoes}
+                    onChange={(e) => setQtdQuestoes(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                  >
+                    <option value={5}>5 questões (Treino rápido)</option>
+                    <option value={10}>10 questões</option>
+                    <option value={15}>15 questões</option>
+                    <option value={20}>20 questões</option>
+                  </select>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={criandoProva}
+                  className="w-full py-3.5 bg-brand-orange hover:bg-orange-600 text-white rounded-xl font-bold shadow-lg shadow-orange-500/20 transition-all flex items-center justify-center gap-2"
+                >
+                  {criandoProva ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlayCircle className="w-5 h-5" />}
+                  Gerar e Iniciar Treino
+                </button>
+              </form>
+            </div>
+          )}
+
         </div>
       </div>
     );
@@ -225,7 +385,7 @@ export default function Simulados() {
   return (
     <div className="min-h-screen bg-[#f3f4f6] font-sans flex flex-col">
       
-      {/* HEADER DA PROVA (Fixado) */}
+      {/* HEADER DA PROVA */}
       <header className="h-16 bg-slate-900 px-6 flex items-center justify-between shrink-0 shadow-md z-10">
         <div className="flex items-center gap-3">
           {finalizado && (
@@ -244,7 +404,7 @@ export default function Simulados() {
         )}
       </header>
 
-      {/* ÁREA CENTRAL DIVIDIDA (Questão x Mapa) */}
+      {/* ÁREA CENTRAL */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         
         {/* LADO ESQUERDO: QUESTÃO ATUAL */}
@@ -265,17 +425,15 @@ export default function Simulados() {
             {questaoAtual ? (
               <div className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200 shadow-sm">
                 
-                {/* Cabeçalho da Questão */}
                 <div className="flex flex-wrap items-center gap-3 mb-6 pb-4 border-b border-slate-100">
                   <span className="px-3 py-1 bg-slate-900 text-white rounded-lg text-xs font-bold uppercase tracking-wider">
-                    Questão {indiceAtual + 1}
+                    Questão {indiceAtual + 1} de {questoes.length}
                   </span>
                   <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold uppercase tracking-wider">
                     {questaoAtual.materia}
                   </span>
                 </div>
 
-                {/* Enunciado */}
                 <div className="prose prose-slate max-w-none mb-8">
                   <p className="text-slate-800 font-medium text-lg leading-relaxed whitespace-pre-wrap">
                     {questaoAtual.enunciado}
@@ -287,9 +445,8 @@ export default function Simulados() {
                   )}
                 </div>
 
-                {/* Alternativas */}
                 <div className="space-y-3">
-                  {questaoAtual.alternativas.map((alt) => {
+                  {questaoAtual.alternativas?.map((alt) => {
                     const isSelecionada = respostas[questaoAtual.id] === alt.letra;
                     const isCorreta = finalizado && alt.letra === questaoAtual.resposta_correta;
                     const errouEssa = finalizado && isSelecionada && !isCorreta;
@@ -318,7 +475,6 @@ export default function Simulados() {
                   })}
                 </div>
 
-                {/* Comentário do Professor (Apenas após finalizar) */}
                 {finalizado && questaoAtual.comentario && (
                   <div className="mt-8 p-5 bg-blue-50 border border-blue-100 rounded-2xl">
                     <h5 className="text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">Comentário do Professor</h5>
@@ -330,12 +486,10 @@ export default function Simulados() {
             ) : (
               <div className="text-center p-12 bg-white rounded-3xl border border-slate-200">
                 <AlertCircle className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                <h3 className="text-xl font-bold text-slate-700">Este simulado está vazio!</h3>
-                <p className="text-slate-500 mt-2">O professor criou o simulado, mas esqueceu de adicionar as questões.</p>
+                <h3 className="text-xl font-bold text-slate-700">Nenhuma questão encontrada!</h3>
               </div>
             )}
 
-            {/* Navegação Prev / Next (Mobile e Desktop) */}
             <div className="flex items-center justify-between mt-6">
               <button 
                 onClick={() => setIndiceAtual(prev => Math.max(0, prev - 1))}
@@ -372,7 +526,6 @@ export default function Simulados() {
                 const respondida = !!respostas[q.id];
                 const ativa = indiceAtual === idx;
                 
-                // Cores do mapa após finalizar
                 let estiloFinalizado = "";
                 if (finalizado) {
                   const acertou = respostas[q.id] === q.resposta_correta;
@@ -398,7 +551,6 @@ export default function Simulados() {
             </div>
           </div>
           
-          {/* Botão de Entregar Prova */}
           {!finalizado && questoes.length > 0 && (
             <div className="p-4 md:p-6 border-t border-slate-100 bg-slate-50">
               <button

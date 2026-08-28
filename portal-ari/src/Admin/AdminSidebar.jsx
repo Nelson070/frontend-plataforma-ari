@@ -1,12 +1,13 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, FileQuestion, Video, Settings } from 'lucide-react';
+import { LayoutDashboard, Users, FileQuestion, Video, Calendar, Settings } from 'lucide-react';
 
 const NAV_ITEMS = [
   { to: '/admin', label: 'Visão Geral', icon: LayoutDashboard, end: true },
   { to: '/admin/alunos', label: 'Gestão de Alunos', icon: Users },
   { to: '/admin/simulados-questoes', label: 'Simulados e Questões', icon: FileQuestion },
   { to: '/admin/aulas-lives', label: 'Aulas e Lives', icon: Video },
+  { to: '/admin/cronograma', label: 'Plano de Estudos', icon: Calendar },
 ];
 
 const navLinkClass = ({ isActive }) =>

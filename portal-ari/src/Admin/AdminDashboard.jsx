@@ -1,38 +1,118 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Search, Bell, Calendar, Plus, DollarSign, TrendingUp,
-  Users, FileQuestion, MoreHorizontal, LogOut
+  Search, Bell, Calendar, Plus, DollarSign,
+  Users, FileQuestion, MoreHorizontal, LogOut, Loader2
 } from 'lucide-react';
 import AdminSidebar from './AdminSidebar';
 import { supabase } from '../lib/supabaseClient';
 
-const KPIS = [
-  { icon: Users, iconStyle: 'bg-blue-50 text-blue-500', label: 'Alunos Ativos', value: '2.450', delta: '+12%' },
-  { icon: DollarSign, iconStyle: 'bg-emerald-50 text-emerald-500', label: 'Receita do Mês', value: 'R$ 45.900', delta: '+8%' },
-  { icon: FileQuestion, iconStyle: 'bg-orange-50 text-brand-orange', label: 'Simulados Realizados', value: '12.304', delta: '+24%' },
-];
-
-const MATRICULAS = [
-  { id: 1, aluno: 'Carlos Silva', iniciais: 'C', plano: 'Anual Premium', data: 'Hoje, 14:30', status: 'Ativo' },
-  { id: 2, aluno: 'Amanda Nunes', iniciais: 'A', plano: 'Mensal Básico', data: 'Hoje, 11:15', status: 'Ativo' },
-  { id: 3, aluno: 'Felipe Costa', iniciais: 'F', plano: 'Anual Premium', data: 'Ontem, 16:40', status: 'Pendente' },
-  { id: 4, aluno: 'Juliana Paes', iniciais: 'J', plano: 'Mensal Básico', data: 'Ontem, 09:20', status: 'Ativo' },
-];
-
 const STATUS_STYLE = {
   Ativo: 'bg-emerald-50 text-emerald-700',
   Pendente: 'bg-amber-50 text-amber-700',
+  Inativo: 'bg-slate-100 text-slate-500',
 };
+
+function iniciais(nome) {
+  if (!nome) return 'AL';
+  return nome
+    .split(' ')
+    .filter(Boolean)
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
 
 export default function Admin() {
   const navigate = useNavigate();
 
-  // Função para deslogar caso o Ari queira sair da conta
+  // Estados dos dados dinâmicos
+  const [loading, setLoading] = useState(true);
+  const [kpis, setKpis] = useState({
+    alunosAtivos: 0,
+    receitaMes: 0,
+    simuladosRealizados: 0,
+  });
+  const [ultimosAlunos, setUltimosAlunos] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // 1. Efeito para carregar dados do Supabase
+  useEffect(() => {
+    async function fetchDashboardData() {
+      try {
+        setLoading(true);
+
+        // --- BUSCA DOS KPIS ---
+        // Alunos Ativos (perfis que não são admin)
+        const { count: totalAlunos, error: errAlunos } = await supabase
+          .from('profiles')
+          .select('*', { count: 'exact', head: true })
+          .neq('role', 'admin');
+
+        if (errAlunos) console.error(errAlunos);
+
+        // Total de Simulados / Provas geradas
+        const { count: totalSimulados } = await supabase
+          .from('simulados')
+          .select('*', { count: 'exact', head: true });
+
+        setKpis({
+          alunosAtivos: totalAlunos || 0,
+          receitaMes: 0, // Ajustável conforme gateway de pagamento futuramente
+          simuladosRealizados: totalSimulados || 0,
+        });
+
+        // --- BUSCA DOS ÚLTIMOS ALUNOS CADASTRADOS ---
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('profiles')
+          .select(`
+            id,
+            nome,
+            created_at,
+            role,
+            turmas:turma_id ( id, nome )
+          `)
+          .neq('role', 'admin')
+          .order('created_at', { ascending: false })
+          .limit(8);
+
+        if (profilesError) throw profilesError;
+
+        const formatados = (profilesData || []).map((p) => ({
+          id: p.id,
+          aluno: p.nome || 'Aluno Sem Nome',
+          iniciais: iniciais(p.nome),
+          plano: p.turmas?.nome || 'Geral / Sem Turma',
+          data: p.created_at ? new Date(p.created_at).toLocaleDateString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+          }) : '—',
+          status: 'Ativo'
+        }));
+
+        setUltimosAlunos(formatados);
+      } catch (error) {
+        console.error('Erro ao carregar dados do dashboard:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchDashboardData();
+  }, []);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate('/login');
   };
+
+  // Filtro de busca na tabela
+  const alunosFiltrados = ultimosAlunos.filter((m) =>
+    m.aluno.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    m.plano.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="flex h-screen bg-[#f4f7f6] font-sans overflow-hidden text-slate-800">
@@ -48,7 +128,9 @@ export default function Admin() {
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Buscar aluno, email ou CPF..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar aluno ou turma..."
               className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 pl-10 pr-4 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange focus:border-brand-orange transition-colors"
             />
           </div>
@@ -70,7 +152,6 @@ export default function Admin() {
                 </div>
               </div>
 
-              {/* Botão de Logout rápido pro Admin */}
               <button 
                 onClick={handleLogout}
                 className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors ml-2"
@@ -94,9 +175,12 @@ export default function Admin() {
               </div>
 
               <div className="flex items-center gap-3">
-                <button className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:text-brand-orange hover:border-brand-orange rounded-xl font-bold text-sm transition-colors shadow-sm">
-                  <Calendar className="w-4 h-4" /> Agendar Live
-                </button>
+                <Link
+                  to="/admin/aulas-lives"
+                  className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:text-brand-orange hover:border-brand-orange rounded-xl font-bold text-sm transition-colors shadow-sm"
+                >
+                  <Calendar className="w-4 h-4" /> Gerenciar Lives
+                </Link>
                 <Link
                   to="/admin/nova-questao" 
                   className="flex items-center gap-2 px-4 py-2.5 bg-brand-orange hover:bg-orange-600 text-white rounded-xl font-bold text-sm transition-colors shadow-sm shadow-orange-500/20"
@@ -108,75 +192,108 @@ export default function Admin() {
 
             {/* KPIs */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {KPIS.map(({ icon: Icon, iconStyle, label, value, delta }) => (
-                <div key={label} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 hover:border-brand-orange/30 transition-colors cursor-default">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${iconStyle}`}>
-                    <Icon className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-slate-500 mb-1">{label}</p>
-                    <div className="flex items-end gap-2">
-                      <h3 className="text-2xl font-black text-slate-900 leading-none">{value}</h3>
-                      <span className="flex items-center text-xs font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md mb-0.5">
-                        <TrendingUp className="w-3 h-3 mr-0.5" /> {delta}
-                      </span>
-                    </div>
-                  </div>
+              {/* Alunos Ativos */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 hover:border-brand-orange/30 transition-colors">
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 bg-blue-50 text-blue-500">
+                  <Users className="w-6 h-6" />
                 </div>
-              ))}
+                <div>
+                  <p className="text-xs font-bold text-slate-500 mb-1">Alunos Ativos</p>
+                  <h3 className="text-2xl font-black text-slate-900 leading-none">
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin text-slate-400 mt-1" /> : kpis.alunosAtivos.toLocaleString('pt-BR')}
+                  </h3>
+                </div>
+              </div>
+
+              {/* Receita do Mês */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 hover:border-brand-orange/30 transition-colors">
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 bg-emerald-50 text-emerald-500">
+                  <DollarSign className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-500 mb-1">Plataforma</p>
+                  <h3 className="text-xl font-black text-slate-900 leading-none">
+                    Ativa & Online
+                  </h3>
+                </div>
+              </div>
+
+              {/* Simulados Cadastrados */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 hover:border-brand-orange/30 transition-colors">
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 bg-orange-50 text-brand-orange">
+                  <FileQuestion className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-500 mb-1">Simulados Criados</p>
+                  <h3 className="text-2xl font-black text-slate-900 leading-none">
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin text-slate-400 mt-1" /> : kpis.simuladosRealizados.toLocaleString('pt-BR')}
+                  </h3>
+                </div>
+              </div>
             </div>
 
-            {/* Tabela de Matrículas */}
+            {/* Tabela de Últimos Alunos Cadastrados */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <h3 className="text-base font-black text-slate-900">Últimas Matrículas</h3>
-                <button className="text-sm font-bold text-brand-orange hover:text-orange-600 transition-colors">
+                <h3 className="text-base font-black text-slate-900">Últimos Alunos Cadastrados</h3>
+                <Link to="/admin/alunos" className="text-sm font-bold text-brand-orange hover:text-orange-600 transition-colors">
                   Ver todos
-                </button>
+                </Link>
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-white border-b border-slate-100">
-                      <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Aluno</th>
-                      <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Plano</th>
-                      <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Data</th>
-                      <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                      <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {MATRICULAS.map((row) => (
-                      <tr key={row.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-xs shrink-0">
-                              {row.iniciais}
-                            </div>
-                            <span className="font-bold text-slate-900 text-sm">{row.aluno}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm font-bold text-slate-600">{row.plano}</span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm font-medium text-slate-500">{row.data}</span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${STATUS_STYLE[row.status]}`}>
-                            {row.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right">
-                          <button className="text-slate-400 hover:text-brand-orange bg-white hover:bg-orange-50 rounded-lg transition-colors p-2">
-                            <MoreHorizontal className="w-4.5 h-4.5" />
-                          </button>
-                        </td>
+                {loading ? (
+                  <div className="py-12 flex flex-col items-center justify-center text-slate-400">
+                    <Loader2 className="w-8 h-8 animate-spin mb-2" />
+                    <p className="text-sm font-medium">Carregando dados...</p>
+                  </div>
+                ) : alunosFiltrados.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400 text-sm font-medium">
+                    Nenhum aluno cadastrado no momento.
+                  </div>
+                ) : (
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-white border-b border-slate-100">
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Aluno</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Turma</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Cadastro</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Ações</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {alunosFiltrados.map((row) => (
+                        <tr key={row.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-xs shrink-0">
+                                {row.iniciais}
+                              </div>
+                              <span className="font-bold text-slate-900 text-sm">{row.aluno}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="text-sm font-bold text-slate-600">{row.plano}</span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="text-sm font-medium text-slate-500">{row.data}</span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${STATUS_STYLE[row.status] || STATUS_STYLE.Ativo}`}>
+                              {row.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right">
+                            <Link to="/admin/alunos" className="text-slate-400 hover:text-brand-orange bg-white hover:bg-orange-50 rounded-lg transition-colors p-2 inline-block">
+                              <MoreHorizontal className="w-4.5 h-4.5" />
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
 

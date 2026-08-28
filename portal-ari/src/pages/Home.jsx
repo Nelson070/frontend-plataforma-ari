@@ -1,6 +1,6 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Target, BookOpen, GraduationCap, Calculator, ChevronRight, Quote, Sparkles, Atom } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Target, BookOpen, GraduationCap, Calculator, ChevronRight, Quote, Atom, LogIn, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 import logoAri from '../assets/logo-ari.jpeg';
@@ -104,6 +104,13 @@ export default function LandingPage() {
     }, 250);
   };
 
+  const scrollToTurmas = () => {
+    const section = document.getElementById('turmas-section');
+    if (section) {
+      section.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   const fadeUp = {
     hidden: { opacity: 0, y: 40 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: "easeOut" } }
@@ -125,7 +132,44 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans overflow-x-hidden selection:bg-brand-orange selection:text-white">
 
-      <section className="relative bg-slate-950 text-white pt-20 pb-20 px-6 sm:px-12 overflow-hidden">
+      {/* CABEÇALHO FIXO NO TOPO */}
+      <header className="fixed top-0 left-0 right-0 h-20 bg-slate-950/80 backdrop-blur-md border-b border-slate-800/60 z-50 px-6 sm:px-12 flex items-center justify-between">
+        <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+          <img 
+            src={logoAri} 
+            alt="Logo Arimatica" 
+            className="h-10 w-10 object-cover rounded-xl border border-brand-orange shadow-md" 
+          />
+          <div className="flex flex-col">
+            <span className="text-sm font-black text-white tracking-wide leading-none mb-1">
+              ARIMATICA
+            </span>
+            <span className="text-[10px] font-black text-brand-orange tracking-widest leading-none">
+              GABARITANDO
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Link
+            to="/login"
+            className="flex items-center gap-2 px-4 py-2 text-slate-300 hover:text-white font-semibold text-sm transition-colors"
+          >
+            <LogIn className="w-4 h-4" />
+            <span className="hidden sm:inline">Entrar</span>
+          </Link>
+
+          <button
+            onClick={scrollToTurmas}
+            className="flex items-center gap-2 px-5 py-2.5 bg-brand-orange hover:bg-orange-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-orange-500/20 transition-all transform active:scale-95"
+          >
+            Acessar Plataforma <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      </header>
+
+      {/* HERO SECTION */}
+      <section className="relative bg-slate-950 text-white pt-36 pb-20 px-6 sm:px-12 overflow-hidden">
 
         <div className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-full max-w-4xl h-[500px] bg-brand-orange/15 blur-[120px] rounded-full pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-blue-500/10 blur-[100px] rounded-full pointer-events-none"></div>
@@ -142,7 +186,7 @@ export default function LandingPage() {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 mb-6">
               <img 
                 src={logoAri} 
-                alt="Ícone Arimatica " 
+                alt="Ícone Arimatica" 
                 className="h-20 w-20 md:h-24 md:w-24 rounded-2xl object-cover border-2 border-brand-orange shadow-[0_0_20px_rgba(249,115,22,0.3)]" 
               />
               <h1 className="text-4xl md:text-5xl font-black text-white leading-tight tracking-wide sm:text-left text-center">
@@ -214,7 +258,8 @@ export default function LandingPage() {
         </motion.div>
       </section>
 
-      <section className="relative z-20 bg-[#f8fafc] px-6 sm:px-12 py-20 pb-32">
+      {/* SEÇÃO DE ESCOLHA DE TURMAS */}
+      <section id="turmas-section" className="relative z-20 bg-[#f8fafc] px-6 sm:px-12 py-20 pb-32">
         <motion.div
           className="max-w-6xl mx-auto"
           initial="hidden"

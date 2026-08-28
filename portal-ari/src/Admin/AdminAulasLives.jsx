@@ -1,153 +1,829 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
-import { Save, Video, ArrowLeft, Loader2, CheckCircle2 } from 'lucide-react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Search, Plus, MoreHorizontal, ChevronDown, PlayCircle, Radio, Loader2, Trash2, X, Edit } from 'lucide-react';
+import AdminSidebar from './AdminSidebar';
+import { useAdminVideoaulas, useAdminLives, useTurmas } from '../hooks/useLives';
+import { supabase } from '../lib/supabaseClient';
+
+const STATUS_LIVE_STYLE = {
+  Agendada: 'bg-blue-50 text-blue-700',
+  Encerrada: 'bg-slate-100 text-slate-500',
+};
 
 export default function AdminAulasLives() {
-  const [turmas, setTurmas] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [sucesso, setSucesso] = useState(false);
+  const [aba, setAba] = useState('videoaulas');
+  const [busca, setBusca] = useState('');
+  const [turmaFiltro, setTurmaFiltro] = useState('');
+  const [menuAberto, setMenuAberto] = useState(null);
 
-  // Estados do Formulário
-  const [turmaId, setTurmaId] = useState('');
-  const [moduloNome, setModuloNome] = useState('Módulo 1');
-  const [titulo, setTitulo] = useState('');
-  const [videoUrl, setVideoUrl] = useState('');
-  const [ordem, setOrdem] = useState(1);
+  // Estados dos Modais
+  const [modalVideoaulaAberto, setModalVideoaulaAberto] = useState(false);
+  const [modalLiveAberto, setModalLiveAberto] = useState(false);
+  const [modalEditVideoAberto, setModalEditVideoAberto] = useState(false);
+  const [modalEditLiveAberto, setModalEditLiveAberto] = useState(false);
+  const [salvando, setSalvando] = useState(false);
 
-  // Busca as turmas na hora que a tela abre
-  useEffect(() => {
-    async function fetchTurmas() {
-      const { data, error } = await supabase.from('turmas').select('*');
-      if (!error && data) {
-        setTurmas(data);
-        if (data.length > 0) setTurmaId(data[0].id);
-      }
-    }
-    fetchTurmas();
-  }, []);
+  // Estados de Edição
+  const [videoEmEdicao, setVideoEmEdicao] = useState(null);
+  const [liveEmEdicao, setLiveEmEdicao] = useState(null);
 
-  const handleSubmit = async (e) => {
+  // Form Videoaula (Cadastro)
+  const [tituloV, setTituloV] = useState('');
+  const [moduloV, setModuloV] = useState('');
+  const [turmaIdV, setTurmaIdV] = useState('');
+  const [duracaoV, setDuracaoV] = useState('');
+  const [videoUrlV, setVideoUrlV] = useState('');
+
+  // Form Live (Cadastro)
+  const [tituloL, setTituloL] = useState('');
+  const [professorL, setProfessorL] = useState('Prof. Ari');
+  const [turmaIdL, setTurmaIdL] = useState('');
+  const [dataHoraL, setDataHoraL] = useState('');
+  const [linkL, setLinkL] = useState('');
+
+  const { turmas } = useTurmas();
+  const { videoaulas, loading: loadingV, excluirVideoaula, fetchVideoaulas } = useAdminVideoaulas({ busca, turmaId: turmaFiltro || undefined });
+  const { lives, loading: loadingL, excluirLive, statusDaLive, fetchLives } = useAdminLives({ busca, turmaId: turmaFiltro || undefined });
+
+  const handleExcluirVideoaula = async (id) => {
+    if (!window.confirm('Excluir essa videoaula?')) return;
+    await excluirVideoaula(id);
+    setMenuAberto(null);
+    if (fetchVideoaulas) fetchVideoaulas();
+  };
+
+  const handleExcluirLive = async (id) => {
+    if (!window.confirm('Excluir essa live?')) return;
+    await excluirLive(id);
+    setMenuAberto(null);
+    if (fetchLives) fetchLives();
+  };
+
+  // Salvar Videoaula
+  const handleSalvarVideoaula = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setSucesso(false);
+    if (!tituloV || !turmaIdV) return alert('Preencha os campos obrigatórios.');
 
+    setSalvando(true);
     try {
-      // Ajuste simples caso o Ari cole a URL inteira do YouTube em vez do link de Embed
-      let urlFinal = videoUrl;
-      if (videoUrl.includes('youtube.com/watch?v=')) {
-        urlFinal = videoUrl.replace('youtube.com/watch?v=', 'youtube.com/embed/');
-        // Remove parâmetros extras como &t= ou &list=
-        urlFinal = urlFinal.split('&')[0]; 
-      } else if (videoUrl.includes('youtu.be/')) {
-        urlFinal = videoUrl.replace('youtu.be/', 'youtube.com/embed/');
-        urlFinal = urlFinal.split('?')[0];
-      }
-
-      const { error } = await supabase.from('aulas').insert([
-        {
-          turma_id: turmaId,
-          modulo_nome: moduloNome,
-          titulo,
-          video_url: urlFinal,
-          ordem: parseInt(ordem)
-        }
-      ]);
+      const { error } = await supabase.from('aulas').insert({
+        titulo: tituloV,
+        modulo_nome: moduloV,
+        turma_id: turmaIdV,
+        duracao_min: duracaoV ? Number(duracaoV) : null,
+        video_url: videoUrlV,
+        ordem: videoaulas.length + 1
+      });
 
       if (error) throw error;
 
-      setSucesso(true);
-      // Limpar o formulário para a próxima aula (mantém a turma e o módulo para facilitar)
-      setTitulo('');
-      setVideoUrl('');
-      setOrdem(prev => parseInt(prev) + 1); // Já sugere o próximo número
-      
-      setTimeout(() => setSucesso(false), 3000);
-
-    } catch (error) {
-      console.error('Erro ao salvar aula:', error.message);
-      alert('Erro ao salvar a aula. Verifique o console.');
+      alert('Videoaula cadastrada com sucesso!');
+      setModalVideoaulaAberto(false);
+      setTituloV('');
+      setModuloV('');
+      setTurmaIdV('');
+      setDuracaoV('');
+      setVideoUrlV('');
+      if (fetchVideoaulas) fetchVideoaulas();
+    } catch (err) {
+      console.error('Erro ao cadastrar videoaula:', err);
+      alert('Erro ao salvar videoaula.');
     } finally {
-      setLoading(false);
+      setSalvando(false);
+    }
+  };
+
+  // Abrir Edição de Videoaula
+  const abrirEdicaoVideo = (v) => {
+    setVideoEmEdicao(v);
+    setTituloV(v.titulo || '');
+    setModuloV(v.modulo_nome || v.modulo || '');
+    setTurmaIdV(v.turma_id || '');
+    setDuracaoV(v.duracao_min || '');
+    setVideoUrlV(v.video_url || '');
+    setModalEditVideoAberto(true);
+    setMenuAberto(null);
+  };
+
+  // Atualizar Videoaula
+  const handleAtualizarVideoaula = async (e) => {
+    e.preventDefault();
+    if (!videoEmEdicao) return;
+
+    setSalvando(true);
+    try {
+      const { error } = await supabase.from('aulas').update({
+        titulo: tituloV,
+        modulo_nome: moduloV,
+        turma_id: turmaIdV,
+        duracao_min: duracaoV ? Number(duracaoV) : null,
+        video_url: videoUrlV,
+      }).eq('id', videoEmEdicao.id);
+
+      if (error) throw error;
+
+      alert('Videoaula atualizada com sucesso!');
+      setModalEditVideoAberto(false);
+      setVideoEmEdicao(null);
+      if (fetchVideoaulas) fetchVideoaulas();
+    } catch (err) {
+      console.error('Erro ao atualizar videoaula:', err);
+      alert('Erro ao atualizar videoaula.');
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  // Salvar Live
+  const handleSalvarLive = async (e) => {
+    e.preventDefault();
+    if (!tituloL || !turmaIdL || !dataHoraL) return alert('Preencha os campos obrigatórios.');
+
+    setSalvando(true);
+    try {
+      const { error } = await supabase.from('lives').insert({
+        titulo: tituloL,
+        professor: professorL,
+        turma_id: turmaIdL,
+        data_hora: dataHoraL,
+        link_transmissao: linkL
+      });
+
+      if (error) throw error;
+
+      alert('Live agendada com sucesso!');
+      setModalLiveAberto(false);
+      setTituloL('');
+      setTurmaIdL('');
+      setDataHoraL('');
+      setLinkL('');
+      if (fetchLives) fetchLives();
+    } catch (err) {
+      console.error('Erro ao agendar live:', err);
+      alert('Erro ao salvar live.');
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  // Abrir Edição de Live
+  const abrirEdicaoLive = (l) => {
+    setLiveEmEdicao(l);
+    setTituloL(l.titulo || '');
+    setProfessorL(l.professor || 'Prof. Ari');
+    setTurmaIdL(l.turma_id || '');
+    // Formatar data para o input datetime-local (YYYY-MM-DDTHH:mm)
+    if (l.data_hora) {
+      const formattedDate = new Date(l.data_hora).toISOString().slice(0, 16);
+      setDataHoraL(formattedDate);
+    }
+    setLinkL(l.link_transmissao || '');
+    setModalEditLiveAberto(true);
+    setMenuAberto(null);
+  };
+
+  // Atualizar Live
+  const handleAtualizarLive = async (e) => {
+    e.preventDefault();
+    if (!liveEmEdicao) return;
+
+    setSalvando(true);
+    try {
+      const { error } = await supabase.from('lives').update({
+        titulo: tituloL,
+        professor: professorL,
+        turma_id: turmaIdL,
+        data_hora: dataHoraL,
+        link_transmissao: linkL
+      }).eq('id', liveEmEdicao.id);
+
+      if (error) throw error;
+
+      alert('Live atualizada com sucesso!');
+      setModalEditLiveAberto(false);
+      setLiveEmEdicao(null);
+      if (fetchLives) fetchLives();
+    } catch (err) {
+      console.error('Erro ao atualizar live:', err);
+      alert('Erro ao atualizar live.');
+    } finally {
+      setSalvando(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6 md:p-8 font-sans">
-      <div className="max-w-3xl mx-auto">
-        
-        <div className="flex items-center gap-4 mb-8">
-          <Link to="/admin/dashboard" className="p-2 bg-white rounded-xl shadow-sm border border-slate-200 hover:bg-slate-50 transition-colors">
-            <ArrowLeft className="w-5 h-5 text-slate-600" />
-          </Link>
+    <div className="flex h-screen bg-[#f4f7f6] font-sans overflow-hidden text-slate-800">
+      <AdminSidebar />
+
+      <main className="flex-1 flex flex-col h-screen overflow-hidden">
+        {/* HEADER */}
+        <header className="h-16 bg-white border-b border-slate-200 px-6 md:px-8 flex justify-between items-center shrink-0">
           <div>
-            <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">
-              <Video className="w-6 h-6 text-brand-orange" />
-              Cadastrar Nova Aula
-            </h1>
-            <p className="text-sm text-slate-500 font-medium mt-1">Adicione videoaulas à plataforma dos alunos.</p>
+            <h2 className="text-lg font-black text-slate-900 leading-tight">Aulas e Lives</h2>
+            <p className="text-xs font-medium text-slate-500">
+              {videoaulas.length} videoaulas · {lives.length} lives cadastradas
+            </p>
+          </div>
+
+          <div className="w-9 h-9 bg-brand-orange rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0">
+            A
+          </div>
+        </header>
+
+        {/* CONTEÚDO */}
+        <div className="flex-1 overflow-y-auto p-6 md:p-8">
+          <div className="max-w-6xl mx-auto space-y-5">
+
+            {/* Abas */}
+            <div className="flex p-1 bg-white border border-slate-200 rounded-xl w-fit">
+              <button
+                onClick={() => setAba('videoaulas')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-colors ${
+                  aba === 'videoaulas' ? 'bg-brand-orange text-white' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <PlayCircle className="w-4 h-4" /> Videoaulas
+              </button>
+              <button
+                onClick={() => setAba('lives')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-colors ${
+                  aba === 'lives' ? 'bg-brand-orange text-white' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <Radio className="w-4 h-4" /> Lives
+              </button>
+            </div>
+
+            {/* Barra de ações */}
+            <div className="flex flex-col md:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  placeholder={aba === 'videoaulas' ? 'Buscar videoaula...' : 'Buscar live...'}
+                  className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange focus:border-brand-orange transition-colors"
+                />
+              </div>
+
+              <div className="relative">
+                <select
+                  value={turmaFiltro}
+                  onChange={(e) => setTurmaFiltro(e.target.value)}
+                  className="appearance-none bg-white border border-slate-200 rounded-xl py-2.5 pl-4 pr-10 text-sm font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-orange focus:border-brand-orange transition-colors"
+                >
+                  <option value="">Todas as turmas</option>
+                  {turmas.map((t) => (
+                    <option key={t.id} value={t.id}>{t.nome}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              </div>
+
+              <button
+                onClick={() => {
+                  if (aba === 'videoaulas') {
+                    setTituloV(''); setModuloV(''); setTurmaIdV(''); setDuracaoV(''); setVideoUrlV('');
+                    setModalVideoaulaAberto(true);
+                  } else {
+                    setTituloL(''); setProfessorL('Prof. Ari'); setTurmaIdL(''); setDataHoraL(''); setLinkL('');
+                    setModalLiveAberto(true);
+                  }
+                }}
+                className="flex items-center justify-center gap-2 px-5 py-2.5 bg-brand-orange hover:bg-orange-600 text-white font-bold text-sm rounded-xl transition-all shadow-md shrink-0 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" /> {aba === 'videoaulas' ? 'Nova Videoaula' : 'Agendar Live'}
+              </button>
+            </div>
+
+            {/* Tabela: Videoaulas */}
+            {aba === 'videoaulas' && (
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                {loadingV ? (
+                  <div className="flex items-center justify-center py-14 text-slate-400 gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin" /> Carregando videoaulas...
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-100">
+                          <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Aula</th>
+                          <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Turma</th>
+                          <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Duração</th>
+                          <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {videoaulas.map((v) => (
+                          <tr key={v.id} className="hover:bg-slate-50/60 transition-colors">
+                            <td className="px-6 py-3.5">
+                              <p className="font-bold text-slate-900 text-sm">{v.titulo}</p>
+                              <p className="text-xs text-slate-500">{v.modulo_nome || v.modulo}</p>
+                            </td>
+                            <td className="px-6 py-3.5 whitespace-nowrap">
+                              <span className="text-sm font-medium text-slate-600">{v.turmas?.nome || '—'}</span>
+                            </td>
+                            <td className="px-6 py-3.5 whitespace-nowrap">
+                              <span className="text-sm font-medium text-slate-600">{v.duracao_min ? `${v.duracao_min} min` : '—'}</span>
+                            </td>
+                            <td className="px-6 py-3.5 whitespace-nowrap text-right relative">
+                              <button
+                                onClick={() => setMenuAberto(menuAberto === v.id ? null : v.id)}
+                                className="text-slate-400 hover:text-brand-orange transition-colors p-1.5"
+                              >
+                                <MoreHorizontal className="w-4.5 h-4.5" />
+                              </button>
+                              {menuAberto === v.id && (
+                                <div className="absolute right-6 top-10 z-10 bg-white border border-slate-200 rounded-xl shadow-lg py-1.5 w-36 text-left">
+                                  <button
+                                    onClick={() => abrirEdicaoVideo(v)}
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                                  >
+                                    <Edit className="w-3.5 h-3.5 text-blue-500" /> Editar
+                                  </button>
+                                  <button
+                                    onClick={() => handleExcluirVideoaula(v.id)}
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-red-600 hover:bg-red-50 transition-colors"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" /> Excluir
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+
+                        {videoaulas.length === 0 && (
+                          <tr>
+                            <td colSpan={4} className="px-6 py-10 text-center text-sm text-slate-400 font-medium">
+                              Nenhuma videoaula cadastrada ainda.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tabela: Lives */}
+            {aba === 'lives' && (
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                {loadingL ? (
+                  <div className="flex items-center justify-center py-14 text-slate-400 gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin" /> Carregando lives...
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-100">
+                          <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Live</th>
+                          <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Turma</th>
+                          <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Data</th>
+                          <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                          <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {lives.map((l) => (
+                          <tr key={l.id} className="hover:bg-slate-50/60 transition-colors">
+                            <td className="px-6 py-3.5">
+                              <p className="font-bold text-slate-900 text-sm">{l.titulo}</p>
+                              <p className="text-xs text-slate-500">{l.professor}</p>
+                            </td>
+                            <td className="px-6 py-3.5 whitespace-nowrap">
+                              <span className="text-sm font-medium text-slate-600">{l.turmas?.nome || '—'}</span>
+                            </td>
+                            <td className="px-6 py-3.5 whitespace-nowrap">
+                              <span className="text-sm font-medium text-slate-600">
+                                {new Date(l.data_hora).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                              </span>
+                            </td>
+                            <td className="px-6 py-3.5 whitespace-nowrap">
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${STATUS_LIVE_STYLE[statusDaLive(l.data_hora)]}`}>
+                                {statusDaLive(l.data_hora)}
+                              </span>
+                            </td>
+                            <td className="px-6 py-3.5 whitespace-nowrap text-right relative">
+                              <button
+                                onClick={() => setMenuAberto(menuAberto === l.id ? null : l.id)}
+                                className="text-slate-400 hover:text-brand-orange transition-colors p-1.5"
+                              >
+                                <MoreHorizontal className="w-4.5 h-4.5" />
+                              </button>
+                              {menuAberto === l.id && (
+                                <div className="absolute right-6 top-10 z-10 bg-white border border-slate-200 rounded-xl shadow-lg py-1.5 w-36 text-left">
+                                  <button
+                                    onClick={() => abrirEdicaoLive(l)}
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                                  >
+                                    <Edit className="w-3.5 h-3.5 text-blue-500" /> Editar
+                                  </button>
+                                  <button
+                                    onClick={() => handleExcluirLive(l.id)}
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-red-600 hover:bg-red-50 transition-colors"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" /> Excluir
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+
+                        {lives.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="px-6 py-10 text-center text-sm text-slate-400 font-medium">
+                              Nenhuma live cadastrada ainda.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
           </div>
         </div>
+      </main>
 
-        {sucesso && (
-          <div className="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-700 p-4 rounded-xl flex items-center gap-3 font-bold">
-            <CheckCircle2 className="w-6 h-6" />
-            Aula salva com sucesso! O Player já foi atualizado.
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200 shadow-sm space-y-6">
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Turma</label>
-              <select value={turmaId} onChange={(e) => setTurmaId(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 font-medium">
-                {turmas.map(t => (
-                  <option key={t.id} value={t.id}>{t.nome}</option>
-                ))}
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Ordem da Aula</label>
-              <input required type="number" min="1" value={ordem} onChange={(e) => setOrdem(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 font-medium" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Nome do Módulo</label>
-              <input required type="text" value={moduloNome} onChange={(e) => setModuloNome(e.target.value)} placeholder="Ex: Matemática Básica" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 font-medium" />
+      {/* MODAL: NOVA VIDEOAULA */}
+      {modalVideoaulaAberto && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 shadow-2xl border border-slate-100">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-black text-slate-900">Cadastrar Nova Videoaula</h3>
+              <button onClick={() => setModalVideoaulaAberto(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl">
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Título da Aula</label>
-              <input required type="text" value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Ex: Regra de Três Simples" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 font-medium" />
+            <form onSubmit={handleSalvarVideoaula} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Título da Aula *</label>
+                <input
+                  type="text"
+                  required
+                  value={tituloV}
+                  onChange={(e) => setTituloV(e.target.value)}
+                  placeholder="Ex: Equações do 2º Grau - Aula 1"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Módulo</label>
+                <input
+                  type="text"
+                  value={moduloV}
+                  onChange={(e) => setModuloV(e.target.value)}
+                  placeholder="Ex: Módulo de Álgebra Básica"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Turma Alvo *</label>
+                  <select
+                    required
+                    value={turmaIdV}
+                    onChange={(e) => setTurmaIdV(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                  >
+                    <option value="">Selecione a turma</option>
+                    {turmas.map((t) => (
+                      <option key={t.id} value={t.id}>{t.nome}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Duração (minutos)</label>
+                  <input
+                    type="number"
+                    value={duracaoV}
+                    onChange={(e) => setDuracaoV(e.target.value)}
+                    placeholder="Ex: 45"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Link do Vídeo (YouTube / Embed)</label>
+                <input
+                  type="text"
+                  value={videoUrlV}
+                  onChange={(e) => setVideoUrlV(e.target.value)}
+                  placeholder="Ex: https://www.youtube.com/embed/..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setModalVideoaulaAberto(false)}
+                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={salvando}
+                  className="flex-1 py-3 bg-brand-orange hover:bg-orange-600 text-white rounded-xl font-bold shadow-lg shadow-orange-500/20 transition-all flex items-center justify-center gap-2"
+                >
+                  {salvando && <Loader2 className="w-4 h-4 animate-spin" />} Salvar Aula
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDITAR VIDEOAULA */}
+      {modalEditVideoAberto && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 shadow-2xl border border-slate-100">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-black text-slate-900">Editar Videoaula</h3>
+              <button onClick={() => setModalEditVideoAberto(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl">
+                <X className="w-5 h-5" />
+              </button>
             </div>
-          </div>
 
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Link do Vídeo (YouTube)</label>
-            <input 
-              required 
-              type="text" 
-              value={videoUrl} 
-              onChange={(e) => setVideoUrl(e.target.value)} 
-              placeholder="Ex: https://www.youtube.com/watch?v=XXXXXXX" 
-              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 font-medium" 
-            />
-            <p className="text-xs text-slate-400 mt-2 font-medium">Você pode colar o link normal do YouTube, o sistema converte automaticamente para o Player.</p>
-          </div>
+            <form onSubmit={handleAtualizarVideoaula} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Título da Aula *</label>
+                <input
+                  type="text"
+                  required
+                  value={tituloV}
+                  onChange={(e) => setTituloV(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                />
+              </div>
 
-          <div className="pt-4 flex justify-end">
-            <button disabled={loading} type="submit" className="flex items-center gap-2 px-8 py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold transition-all disabled:opacity-70">
-              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-              {loading ? 'Salvando...' : 'Publicar Aula'}
-            </button>
-          </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Módulo</label>
+                <input
+                  type="text"
+                  value={moduloV}
+                  onChange={(e) => setModuloV(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                />
+              </div>
 
-        </form>
-      </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Turma Alvo *</label>
+                  <select
+                    required
+                    value={turmaIdV}
+                    onChange={(e) => setTurmaIdV(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                  >
+                    <option value="">Selecione a turma</option>
+                    {turmas.map((t) => (
+                      <option key={t.id} value={t.id}>{t.nome}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Duração (minutos)</label>
+                  <input
+                    type="number"
+                    value={duracaoV}
+                    onChange={(e) => setDuracaoV(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Link do Vídeo (YouTube / Embed)</label>
+                <input
+                  type="text"
+                  value={videoUrlV}
+                  onChange={(e) => setVideoUrlV(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setModalEditVideoAberto(false)}
+                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={salvando}
+                  className="flex-1 py-3 bg-brand-orange hover:bg-orange-600 text-white rounded-xl font-bold shadow-lg shadow-orange-500/20 transition-all flex items-center justify-center gap-2"
+                >
+                  {salvando && <Loader2 className="w-4 h-4 animate-spin" />} Salvar Alterações
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: AGENDAR LIVE */}
+      {modalLiveAberto && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 shadow-2xl border border-slate-100">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-black text-slate-900">Agendar Nova Live</h3>
+              <button onClick={() => setModalLiveAberto(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSalvarLive} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Título da Live *</label>
+                <input
+                  type="text"
+                  required
+                  value={tituloL}
+                  onChange={(e) => setTituloL(e.target.value)}
+                  placeholder="Ex: Tir dúvidas de Matemática para o ENEM"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Turma Alvo *</label>
+                  <select
+                    required
+                    value={turmaIdL}
+                    onChange={(e) => setTurmaIdL(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                  >
+                    <option value="">Selecione a turma</option>
+                    {turmas.map((t) => (
+                      <option key={t.id} value={t.id}>{t.nome}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Professor</label>
+                  <input
+                    type="text"
+                    value={professorL}
+                    onChange={(e) => setProfessorL(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Data e Hora *</label>
+                <input
+                  type="datetime-local"
+                  required
+                  value={dataHoraL}
+                  onChange={(e) => setDataHoraL(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Link de Transmissão</label>
+                <input
+                  type="text"
+                  value={linkL}
+                  onChange={(e) => setLinkL(e.target.value)}
+                  placeholder="Ex: https://youtube.com/live/..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setModalLiveAberto(false)}
+                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={salvando}
+                  className="flex-1 py-3 bg-brand-orange hover:bg-orange-600 text-white rounded-xl font-bold shadow-lg shadow-orange-500/20 transition-all flex items-center justify-center gap-2"
+                >
+                  {salvando && <Loader2 className="w-4 h-4 animate-spin" />} Agendar Live
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDITAR LIVE */}
+      {modalEditLiveAberto && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 shadow-2xl border border-slate-100">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-black text-slate-900">Editar Live</h3>
+              <button onClick={() => setModalEditLiveAberto(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAtualizarLive} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Título da Live *</label>
+                <input
+                  type="text"
+                  required
+                  value={tituloL}
+                  onChange={(e) => setTituloL(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Turma Alvo *</label>
+                  <select
+                    required
+                    value={turmaIdL}
+                    onChange={(e) => setTurmaIdL(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                  >
+                    <option value="">Selecione a turma</option>
+                    {turmas.map((t) => (
+                      <option key={t.id} value={t.id}>{t.nome}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Professor</label>
+                  <input
+                    type="text"
+                    value={professorL}
+                    onChange={(e) => setProfessorL(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Data e Hora *</label>
+                <input
+                  type="datetime-local"
+                  required
+                  value={dataHoraL}
+                  onChange={(e) => setDataHoraL(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Link de Transmissão</label>
+                <input
+                  type="text"
+                  value={linkL}
+                  onChange={(e) => setLinkL(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setModalEditLiveAberto(false)}
+                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={salvando}
+                  className="flex-1 py-3 bg-brand-orange hover:bg-orange-600 text-white rounded-xl font-bold shadow-lg shadow-orange-500/20 transition-all flex items-center justify-center gap-2"
+                >
+                  {salvando && <Loader2 className="w-4 h-4 animate-spin" />} Salvar Alterações
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

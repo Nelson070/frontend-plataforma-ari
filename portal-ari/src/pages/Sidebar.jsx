@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabaseClient';
 import {
   LayoutDashboard, FileText, ListOrdered, Target, PlayCircle, Radio, TrendingUp,
   Trophy, LogOut, Calendar,
@@ -7,15 +8,6 @@ import {
 
 // IMPORTANDO A LOGO AQUI 👇
 import logoAri from '../assets/logo-ari.jpeg';
-
-const NAV_ITEMS = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/banco-questoes', label: 'Banco de Questões', icon: FileText },
-  { to: '/assuntos-enem', label: 'Assuntos do ENEM', icon: ListOrdered },
-  { to: '/simulados', label: 'Simulados', icon: Target },
-  { to: '/player', label: 'Videoaulas', icon: PlayCircle },
-  { to: '/lives', label: 'Lives', icon: Radio },
-];
 
 const NAV_ITEMS_SECONDARY = [
   { to: '/desempenho', label: 'Meu Desempenho', icon: TrendingUp },
@@ -32,6 +24,43 @@ const navLinkClass = ({ isActive }) =>
 
 export default function Sidebar() {
   const navigate = useNavigate();
+  const [isTurmaEnem, setIsTurmaEnem] = useState(false);
+
+  // Verifica se o aluno logado pertence à turma ENEM
+  useEffect(() => {
+    async function verificarTurmaEnem() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('turmas(nome)')
+          .eq('id', user.id)
+          .single();
+
+        if (profile?.turmas?.nome) {
+          const nomeTurma = profile.turmas.nome.toLowerCase();
+          if (nomeTurma.includes('enem')) {
+            setIsTurmaEnem(true);
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao verificar turma do aluno:', error);
+      }
+    }
+    verificarTurmaEnem();
+  }, []);
+
+  // Itens dinâmicos: se for turma ENEM, inclui "Assuntos do ENEM" na lista principal
+  const NAV_ITEMS = [
+    { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
+    { to: '/banco-questoes', label: 'Banco de Questões', icon: FileText },
+    ...(isTurmaEnem ? [{ to: '/assuntos-enem', label: 'Assuntos do ENEM', icon: ListOrdered }] : []),
+    { to: '/simulados', label: 'Simulados', icon: Target },
+    { to: '/player', label: 'Videoaulas', icon: PlayCircle },
+    { to: '/lives', label: 'Lives', icon: Radio },
+  ];
 
   return (
     <aside className="w-64 bg-slate-950 flex-col hidden lg:flex shrink-0">

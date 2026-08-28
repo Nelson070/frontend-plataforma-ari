@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
-import { supabase } from '../lib/supabaseClient'; // 👈 Importação adicionada para consultar o banco
+import { supabase } from '../lib/supabaseClient';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -33,12 +33,13 @@ export default function Login() {
         });
 
         if (error) throw error;
-        navigate('/dashboard');
+        
+        // Redireciona para o pagamento após criar a conta com sucesso
+        navigate('/pagamento');
       } else {
         const { error } = await signIn({ email, password });
         if (error) throw error;
 
-        // 👇 A MÁGICA DO REDIRECIONAMENTO 👇
         // 1. Pega o usuário que acabou de logar na sessão
         const { data: { user } } = await supabase.auth.getUser();
         
@@ -195,7 +196,7 @@ export default function Login() {
               onClick={() => setIsRegistering(!isRegistering)}
               className="font-bold text-brand-orange hover:text-orange-600 transition-colors"
             >
-              {isRegistering ? 'Faça login aqui' : 'Crie uma conta de teste'}
+              {isRegistering ? 'Faça login aqui' : 'Crie sua conta'}
             </button>
           </p>
         </div>
