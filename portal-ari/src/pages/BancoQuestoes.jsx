@@ -182,17 +182,37 @@ export default function BancoQuestoes() {
                       onCopy={(e) => e.preventDefault()}
                       onContextMenu={(e) => e.preventDefault()}
                     >
-                      <p className="text-slate-800 font-medium leading-relaxed mb-5">
-                        {questaoAtual.enunciado}
-                      </p>
-
-                      {questaoAtual.imagem_url && (
-                        <img
-                          src={questaoAtual.imagem_url}
-                          alt="Ilustração da questão"
-                          className="rounded-xl border border-slate-200 max-h-80 mx-auto mb-5"
-                        />
-                      )}
+                      {/* ENUNCIADO EM BLOCOS INLINE (TEXTO E IMAGENS LADO A LADO) */}
+                      <div className="flex flex-wrap items-center gap-2 text-slate-800 font-medium text-base leading-relaxed mb-5">
+                        {questaoAtual.blocos_enunciado && questaoAtual.blocos_enunciado.length > 0 ? (
+                          questaoAtual.blocos_enunciado.map((bloco, idx) => (
+                            bloco.tipo === 'texto' ? (
+                              <span key={idx} className="inline-block">
+                                {bloco.valor}
+                              </span>
+                            ) : (
+                              <img
+                                key={idx}
+                                src={bloco.valor}
+                                alt="Ilustração da questão"
+                                className="inline-block h-8 w-auto object-contain align-middle mx-1 rounded border border-slate-200 bg-white"
+                              />
+                            )
+                          ))
+                        ) : (
+                          // Fallback para o modo antigo caso a questão não tenha blocos salvos
+                          <>
+                            <span className="inline-block">{questaoAtual.enunciado}</span>
+                            {questaoAtual.imagem_url && (
+                              <img
+                                src={questaoAtual.imagem_url}
+                                alt="Ilustração da questão"
+                                className="inline-block h-10 w-auto object-contain align-middle mx-1 rounded border border-slate-200 bg-white"
+                              />
+                            )}
+                          </>
+                        )}
+                      </div>
 
                       <div className="space-y-2.5">
                         {questaoAtual.alternativas.map((alt) => (

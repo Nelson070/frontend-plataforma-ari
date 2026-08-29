@@ -17,8 +17,8 @@ import AdminConfiguracoes from './Admin/AdminConfiguracoes';
 import AdminAlunos from './Admin/AdminAlunos';
 import AdminSimuladosQuestoes from './Admin/AdminSimuladosQuestoes';
 import AdminAulasLives from './Admin/AdminAulasLives';
-import AdminCronograma from './Admin/AdminCronograma';
 import AdminNovaQuestao from './pages/AdminNovaQuestao';
+import AdminNovoSimulado from './Admin/AdminNovoSimulado';
 import BancoQuestoes from './pages/BancoQuestoes';
 import Desempenho from './pages/Desempenho';
 import PlanoEstudos from './pages/PlanoEstudos';
@@ -54,7 +54,7 @@ function App() {
           <Route path="/admin/aulas-lives" element={<AdminRoute><AdminAulasLives /></AdminRoute>} />
           <Route path="/admin/questao" element={<AdminRoute><AdminNovaQuestao /></AdminRoute>} />
           <Route path="/admin/nova-questao" element={<AdminRoute><AdminNovaQuestao /></AdminRoute>} />
-          <Route path="/admin/cronograma" element={<AdminRoute><AdminCronograma /></AdminRoute>} />
+          <Route path="/admin/novo-simulado" element={<AdminRoute><AdminNovoSimulado /></AdminRoute>} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

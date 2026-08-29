@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, Plus, MoreHorizontal, ChevronDown, FileQuestion, ClipboardList, Loader2, Trash2 } from 'lucide-react';
+import { Search, Plus, MoreHorizontal, ChevronDown, FileQuestion, ClipboardList, Loader2, Trash2, Eye, X } from 'lucide-react';
 import AdminSidebar from './AdminSidebar';
-import { useAdminQuestoes, useAdminSimulados, useTurmas } from '../hooks/useAdmin.js';
+import { useAdminQuestoes, useAdminSimulados, useTurmas } from '../hooks/useAdmin';
+import QuestaoPreviewCard from '../components/QuestaoPreviewCard';
 
 const DIFICULDADE_STYLE = {
   facil: 'bg-emerald-50 text-emerald-700',
@@ -17,8 +18,8 @@ export default function AdminSimuladosQuestoes() {
   const [busca, setBusca] = useState('');
   const [turmaFiltro, setTurmaFiltro] = useState('');
   const [menuAberto, setMenuAberto] = useState(null);
+  const [questaoVisualizando, setQuestaoVisualizando] = useState(null);
 
-  
   const { turmas } = useTurmas();
   const { questoes, loading: loadingQ, excluirQuestao } = useAdminQuestoes({ busca, turmaId: turmaFiltro || undefined });
   const { simulados, loading: loadingS, excluirSimulado } = useAdminSimulados({ busca, turmaId: turmaFiltro || undefined });
@@ -115,13 +116,12 @@ export default function AdminSimuladosQuestoes() {
                   <Plus className="w-4 h-4" /> Nova Questão
                 </Link>
               ) : (
-                <button
-                  disabled
-                  title="Criação de simulado pela interface ainda não implementada"
-                  className="flex items-center justify-center gap-2 px-5 py-2.5 bg-slate-300 text-white font-bold text-sm rounded-xl cursor-not-allowed shrink-0"
+                <Link
+                  to="/admin/novo-simulado"
+                  className="flex items-center justify-center gap-2 px-5 py-2.5 bg-brand-orange hover:bg-orange-600 text-white font-bold text-sm rounded-xl transition-colors shrink-0"
                 >
                   <Plus className="w-4 h-4" /> Novo Simulado
-                </button>
+                </Link>
               )}
             </div>
 
@@ -146,7 +146,11 @@ export default function AdminSimuladosQuestoes() {
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {questoes.map((q) => (
-                          <tr key={q.id} className="hover:bg-slate-50/60 transition-colors">
+                          <tr
+                            key={q.id}
+                            onClick={() => setQuestaoVisualizando(q)}
+                            className="hover:bg-slate-50/60 transition-colors cursor-pointer"
+                          >
                             <td className="px-6 py-3.5 max-w-xs">
                               <p className="text-sm font-medium text-slate-700 truncate">{q.enunciado}</p>
                             </td>
@@ -163,13 +167,19 @@ export default function AdminSimuladosQuestoes() {
                             </td>
                             <td className="px-6 py-3.5 whitespace-nowrap text-right relative">
                               <button
-                                onClick={() => setMenuAberto(menuAberto === q.id ? null : q.id)}
+                                onClick={(e) => { e.stopPropagation(); setMenuAberto(menuAberto === q.id ? null : q.id); }}
                                 className="text-slate-400 hover:text-brand-orange transition-colors p-1.5"
                               >
                                 <MoreHorizontal className="w-4.5 h-4.5" />
                               </button>
                               {menuAberto === q.id && (
                                 <div className="absolute right-6 top-10 z-10 bg-white border border-slate-200 rounded-xl shadow-lg py-1 w-40">
+                                  <button
+                                    onClick={() => { setQuestaoVisualizando(q); setMenuAberto(null); }}
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                                  >
+                                    <Eye className="w-4 h-4" /> Visualizar
+                                  </button>
                                   <button
                                     onClick={() => handleExcluirQuestao(q.id)}
                                     className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
@@ -268,6 +278,44 @@ export default function AdminSimuladosQuestoes() {
           </div>
         </div>
       </main>
+
+      {/* MODAL: VISUALIZAR QUESTÃO */}
+      {questaoVisualizando && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
+          onClick={() => setQuestaoVisualizando(null)}
+        >
+          <div
+            className="max-w-xl w-full max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3 px-1">
+              <p className="text-xs font-bold text-white/90 bg-slate-900/60 backdrop-blur-sm px-3 py-1.5 rounded-full">
+                Turma: {questaoVisualizando.turmas?.nome || '—'}
+                {questaoVisualizando.banca ? ` · ${questaoVisualizando.banca}` : ''}
+                {questaoVisualizando.ano ? ` · ${questaoVisualizando.ano}` : ''}
+              </p>
+              <button
+                onClick={() => setQuestaoVisualizando(null)}
+                className="w-8 h-8 bg-white rounded-full flex items-center justify-center text-slate-500 hover:text-slate-900 shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <QuestaoPreviewCard
+              materia={questaoVisualizando.materia}
+              assunto={questaoVisualizando.assunto}
+              dificuldade={questaoVisualizando.dificuldade}
+              enunciado={questaoVisualizando.enunciado}
+              imagemUrl={questaoVisualizando.imagem_url}
+              alternativas={questaoVisualizando.alternativas || []}
+              respostaCorreta={questaoVisualizando.resposta_correta}
+              comentario={questaoVisualizando.comentario}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
