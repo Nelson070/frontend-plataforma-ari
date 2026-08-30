@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Award, Flame, PlayCircle as PlayIcon, FileText, Target, TrendingUp, Calendar } from 'lucide-react';
+import { ChevronRight, Award, Flame, PlayCircle as PlayIcon, FileText, Target, TrendingUp, Calendar, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Sidebar from './Sidebar';
 import { useAuth } from '../hooks/useAuth';
+import { supabase } from '../lib/supabaseClient';
 
 const QUICK_ACCESS = [
   {
@@ -40,10 +41,97 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { profile } = useAuth();
 
+  const [ultimaAula, setUltimaAula] = useState(null);
+  const [dadosProgresso, setDadosProgresso] = useState({ dias_seguidos: 1, meta_dias_semana: 0, meta_total_semana: 5, progresso_aula_porcentagem: 0 });
+  const [loading, setLoading] = useState(true);
+
   const nome = profile?.nome || 'Concurseiro(a)';
   const primeiroNome = nome.split(' ')[0];
   const inicial = nome.charAt(0).toUpperCase();
   const turmaNome = profile?.turmas?.nome || '—';
+
+  useEffect(() => {
+    async function fetchData() {
+      if (!profile?.id) return;
+
+      try {
+        // 1. Busca a última aula cadastrada
+        const { data: aulaData } = await supabase
+          .from('aulas')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (aulaData) setUltimaAula(aulaData);
+
+        // 2. Cálculo correto da segunda-feira da semana atual (sem mutar data global)
+        const agora = new Date();
+        const diaSemana = agora.getDay(); // 0 (Domingo) a 6 (Sábado)
+        const diffDias = agora.getDate() - diaSemana + (diaSemana === 0 ? -6 : 1);
+        
+        const segundaFeira = new Date(agora.setDate(diffDias));
+        segundaFeira.setHours(0, 0, 0, 0);
+
+        // 3. Busca tarefas concluídas pelo aluno nesta semana na tabela 'plano_estudos_tarefas'
+        const { data: tarefasSemana, error: erroTarefas } = await supabase
+          .from('plano_estudos_tarefas')
+          .select('*')
+          .eq('aluno_id', profile.id)
+          .eq('concluido', true)
+          .gte('updated_at', segundaFeira.toISOString());
+
+        // Conta quantos dias únicos da semana o aluno concluiu tarefas
+        let diasEstudadosReais = 0;
+        if (!erroTarefas && tarefasSemana) {
+          const diasUnicos = new Set(
+            tarefasSemana.map(t => new Date(t.updated_at).toDateString())
+          );
+          diasEstudadosReais = diasUnicos.size;
+        }
+
+        // 4. Busca ou inicializa o progresso na tabela 'progresso_aluno'
+        let { data: progData, error } = await supabase
+          .from('progresso_aluno')
+          .select('*')
+          .eq('aluno_id', profile.id)
+          .single();
+
+        if (error || !progData) {
+          const { data: novoProg } = await supabase
+            .from('progresso_aluno')
+            .insert([{ 
+              aluno_id: profile.id, 
+              dias_seguidos: 1, 
+              meta_dias_semana: diasEstudadosReais, 
+              meta_total_semana: 5, 
+              progresso_aula_porcentagem: 15 
+            }])
+            .select()
+            .single();
+          
+          if (novoProg) {
+            setDadosProgresso({
+              ...novoProg,
+              meta_dias_semana: diasEstudadosReais
+            });
+          }
+        } else {
+          setDadosProgresso({
+            ...progData,
+            meta_dias_semana: diasEstudadosReais
+          });
+        }
+
+      } catch (err) {
+        console.error('Erro ao carregar dados do dashboard:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+  }, [profile]);
 
   const fadeUp = {
     hidden: { opacity: 0, y: 16 },
@@ -73,7 +161,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 rounded-full">
               <Flame className="w-3.5 h-3.5 text-brand-orange" />
-              <span className="text-xs font-bold text-brand-orange">12 dias seguidos</span>
+              <span className="text-xs font-bold text-brand-orange">{dadosProgresso.dias_seguidos} dias seguidos</span>
             </div>
             <div className="w-9 h-9 bg-slate-900 rounded-full flex items-center justify-center text-white font-bold text-xs cursor-pointer hover:bg-slate-800 transition-colors">
               {inicial}
@@ -97,7 +185,7 @@ export default function Dashboard() {
                 <div>
                   <h2 className="text-xl md:text-2xl font-black mb-1">Bora gabaritar hoje, {primeiroNome}?</h2>
                   <p className="text-slate-400 text-sm font-medium mb-5">
-                    Sua última aula foi sobre Tabela-Verdade. Vamos continuar?
+                    {ultimaAula ? `Sua última aula foi sobre ${ultimaAula.titulo || ultimaAula.nome}. Vamos continuar?` : 'Acompanhe seus estudos por aqui.'}
                   </p>
                 </div>
 
@@ -107,13 +195,13 @@ export default function Dashboard() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[11px] font-bold text-brand-orange uppercase tracking-wider mb-0.5">
-                      Módulo 2
+                      {ultimaAula?.modulo || 'Módulo Recente'}
                     </p>
                     <h4 className="font-bold text-white text-sm truncate">
-                      Conectivos Lógicos e Regras
+                      {loading ? 'Carregando...' : (ultimaAula?.titulo || ultimaAula?.nome || 'Nenhuma aula recente')}
                     </h4>
                     <div className="w-full h-1.5 bg-slate-800 rounded-full mt-2 overflow-hidden">
-                      <div className="h-full bg-brand-orange rounded-full" style={{ width: '65%' }} />
+                      <div className="h-full bg-brand-orange rounded-full transition-all duration-500" style={{ width: `${dadosProgresso.progresso_aula_porcentagem}%` }} />
                     </div>
                   </div>
                   <button
@@ -130,9 +218,13 @@ export default function Dashboard() {
                 <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1">
                   Meta Semanal
                 </p>
-                <h3 className="text-2xl font-black text-slate-900">4 / 5 dias</h3>
+                <h3 className="text-2xl font-black text-slate-900">
+                  {dadosProgresso.meta_dias_semana} / {dadosProgresso.meta_total_semana} dias
+                </h3>
                 <p className="text-xs font-medium text-slate-500 mt-1.5">
-                  Falta um dia para bater a meta
+                  {dadosProgresso.meta_total_semana - dadosProgresso.meta_dias_semana > 0 
+                    ? `Falta ${dadosProgresso.meta_total_semana - dadosProgresso.meta_dias_semana} dia para bater a meta` 
+                    : 'Meta batida esta semana! 🎉'}
                 </p>
               </div>
             </motion.div>

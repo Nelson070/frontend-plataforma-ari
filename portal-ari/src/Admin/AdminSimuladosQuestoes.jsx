@@ -308,6 +308,7 @@ export default function AdminSimuladosQuestoes() {
               assunto={questaoVisualizando.assunto}
               dificuldade={questaoVisualizando.dificuldade}
               enunciado={questaoVisualizando.enunciado}
+              blocosEnunciado={questaoVisualizando.blocos_enunciado}
               imagemUrl={questaoVisualizando.imagem_url}
               alternativas={questaoVisualizando.alternativas || []}
               respostaCorreta={questaoVisualizando.resposta_correta}

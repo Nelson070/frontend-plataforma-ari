@@ -1,22 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
-import { Save, PlusCircle, ArrowLeft, Loader2, CheckCircle2, ImagePlus, X, Eye, Plus, Trash2, ArrowUp, ArrowDown, Type } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import QuestaoPreviewCard from '../components/QuestaoPreviewCard';
+import { supabase } from '../lib/supabaseClient';
+import { Save, PlusCircle, ArrowLeft, Loader2, CheckCircle2, ImagePlus, X, Eye } from 'lucide-react';
+import BlocoEditor from '../components/BlocoEditor';
+import RenderBlocos from '../components/RenderBlocos';
+import { criarBloco, processarBlocos, blocosParaTexto } from '../lib/blocos';
 
-const DIFICULDADE_STYLE = {
-  facil: 'bg-emerald-50 text-emerald-700',
-  medio: 'bg-amber-50 text-amber-700',
-  dificil: 'bg-red-50 text-red-700',
-};
-const DIFICULDADE_LABEL = { facil: 'Fácil', medio: 'Médio', dificil: 'Difícil' };
+const LETRAS = ['A', 'B', 'C', 'D', 'E'];
 
 export default function AdminNovaQuestao() {
   const [turmas, setTurmas] = useState([]);
   const [loading, setLoading] = useState(false);
   const [sucesso, setSucesso] = useState(false);
 
-  // Estados do Formulário
   const [turmaId, setTurmaId] = useState('');
   const [materia, setMateria] = useState('');
   const [assunto, setAssunto] = useState('');
@@ -26,68 +22,46 @@ export default function AdminNovaQuestao() {
   const [ano, setAno] = useState(new Date().getFullYear());
   const [banca, setBanca] = useState('Inédita');
 
-  // Estado de Blocos do Enunciado (Texto e Imagens intercaladas - máx 4 imagens)
-  const [blocos, setBlocos] = useState([
-    { id: Date.now(), tipo: 'texto', valor: '', file: null }
-  ]);
+  // Enunciado em blocos (texto/imagem intercalados)
+  const [blocosEnunciado, setBlocosEnunciado] = useState([criarBloco('texto')]);
 
-  const [altA, setAltA] = useState('');
-  const [altB, setAltB] = useState('');
-  const [altC, setAltC] = useState('');
-  const [altD, setAltD] = useState('');
-  const [altE, setAltE] = useState('');
+  // Gráfico/imagem principal, em destaque abaixo do enunciado (não é "inline")
+  const [imagemPrincipalFile, setImagemPrincipalFile] = useState(null);
+  const [imagemPrincipalPreview, setImagemPrincipalPreview] = useState(null);
+
+  // Cada alternativa também tem seus próprios blocos de texto/imagem
+  const [alternativasBlocos, setAlternativasBlocos] = useState(() =>
+    Object.fromEntries(LETRAS.map((letra) => [letra, [criarBloco('texto')]]))
+  );
 
   useEffect(() => {
-    async function fetchTurmas() {
-      const { data, error } = await supabase.from('turmas').select('*');
+    supabase.from('turmas').select('*').then(({ data, error }) => {
       if (!error && data) {
         setTurmas(data);
         if (data.length > 0) setTurmaId(data[0].id);
       }
-    }
-    fetchTurmas();
+    });
   }, []);
 
-  // Manipulação dos blocos do enunciado
-  const adicionarBloco = (tipo) => {
-    if (tipo === 'imagem') {
-      const totalImagens = blocos.filter(b => b.tipo === 'imagem').length;
-      if (totalImagens >= 4) {
-        return alert('O limite máximo é de 4 imagens por questão.');
-      }
-    }
-    setBlocos([...blocos, { id: Date.now(), tipo, valor: '', file: null }]);
-  };
-
-  const removerBloco = (id) => {
-    if (blocos.length === 1) return alert('A questão precisa ter ao menos um bloco no enunciado.');
-    setBlocos(blocos.filter(b => b.id !== id));
-  };
-
-  const atualizarBlocoTexto = (id, texto) => {
-    setblocosState(id, { valor: texto });
-  };
-
-  const atualizarBlocoImagem = (id, e) => {
+  const handleImagemPrincipalChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      const previewUrl = URL.createObjectURL(file);
-      setblocosState(id, { file, valor: previewUrl });
+      setImagemPrincipalFile(file);
+      setImagemPrincipalPreview(URL.createObjectURL(file));
     }
   };
 
-  const setblocosState = (id, updates) => {
-    setBlocos(blocos.map(b => b.id === id ? { ...b, ...updates } : b));
+  const removerImagemPrincipal = () => {
+    if (imagemPrincipalPreview) URL.revokeObjectURL(imagemPrincipalPreview);
+    setImagemPrincipalFile(null);
+    setImagemPrincipalPreview(null);
   };
 
-  const moverBloco = (index, direcao) => {
-    const novoIndex = index + direcao;
-    if (novoIndex < 0 || novoIndex >= blocos.length) return;
-    const novosBlocos = [...blocos];
-    const temp = novosBlocos[index];
-    novosBlocos[index] = novosBlocos[novoIndex];
-    novosBlocos[novoIndex] = temp;
-    setBlocos(novosBlocos);
+  const resetarFormulario = () => {
+    setBlocosEnunciado([criarBloco('texto')]);
+    setAlternativasBlocos(Object.fromEntries(LETRAS.map((letra) => [letra, [criarBloco('texto')]])));
+    removerImagemPrincipal();
+    setComentario('');
   };
 
   const handleSubmit = async (e) => {
@@ -96,63 +70,51 @@ export default function AdminNovaQuestao() {
     setSucesso(false);
 
     try {
-      // Processa o upload de cada imagem dentro dos blocos
-      const blocosProcessados = await Promise.all(
-        blocos.map(async (bloco) => {
-          if (bloco.tipo === 'imagem' && bloco.file) {
-            const fileExt = bloco.file.name.split('.').pop();
-            const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-            const filePath = `${turmaId}/${fileName}`;
+      // 1. Sobe as imagens do enunciado que ainda são só Files locais
+      const blocosEnunciadoProntos = await processarBlocos(supabase, blocosEnunciado, turmaId, 'enunciado');
 
-            const { error: uploadError } = await supabase.storage
-              .from('questoes_imagens')
-              .upload(filePath, bloco.file);
+      // 2. Sobe a imagem principal/gráfico, se tiver
+      let imagemPrincipalUrl = null;
+      if (imagemPrincipalFile) {
+        const fileExt = imagemPrincipalFile.name.split('.').pop();
+        const filePath = `${turmaId}/principal-${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage.from('questoes_imagens').upload(filePath, imagemPrincipalFile);
+        if (uploadError) throw uploadError;
+        const { data } = supabase.storage.from('questoes_imagens').getPublicUrl(filePath);
+        imagemPrincipalUrl = data.publicUrl;
+      }
 
-            if (uploadError) throw uploadError;
-
-            const { data } = supabase.storage.from('questoes_imagens').getPublicUrl(filePath);
-            return { tipo: 'imagem', valor: data.publicUrl };
-          }
-          return { tipo: bloco.tipo, valor: bloco.valor };
+      // 3. Sobe as imagens de cada alternativa
+      const alternativasFormatadas = await Promise.all(
+        LETRAS.map(async (letra) => {
+          const blocosProntos = await processarBlocos(supabase, alternativasBlocos[letra], turmaId, `alt-${letra}`);
+          return {
+            letra,
+            texto: blocosParaTexto(blocosProntos), // fallback em texto puro, pra compatibilidade
+            blocos: blocosProntos,
+          };
         })
       );
 
-      const alternativasFormatadas = [
-        { letra: 'A', texto: altA },
-        { letra: 'B', texto: altB },
-        { letra: 'C', texto: altC },
-        { letra: 'D', texto: altD },
-        { letra: 'E', texto: altE },
-      ];
-
-      const enunciadoTextoSimples = blocosProcessados
-        .map(b => b.tipo === 'texto' ? b.valor : '[IMAGEM]')
-        .join(' ');
-
-      const { error } = await supabase.from('questoes').insert([
-        {
-          turma_id: turmaId,
-          materia,
-          assunto,
-          dificuldade,
-          enunciado: enunciadoTextoSimples,
-          blocos_enunciado: blocosProcessados,
-          alternativas: alternativasFormatadas,
-          resposta_correta: respostaCorreta,
-          comentario,
-          ano: parseInt(ano),
-          banca,
-          imagem_url: blocosProcessados.find(b => b.tipo === 'imagem')?.valor || null,
-        },
-      ]);
+      const { error } = await supabase.from('questoes').insert([{
+        turma_id: turmaId,
+        materia,
+        assunto,
+        dificuldade,
+        enunciado: blocosParaTexto(blocosEnunciadoProntos),
+        blocos_enunciado: blocosEnunciadoProntos,
+        imagem_url: imagemPrincipalUrl,
+        alternativas: alternativasFormatadas,
+        resposta_correta: respostaCorreta,
+        comentario,
+        ano: parseInt(ano),
+        banca,
+      }]);
 
       if (error) throw error;
 
       setSucesso(true);
-      setBlocos([{ id: Date.now(), tipo: 'texto', valor: '', file: null }]);
-      setAltA(''); setAltB(''); setAltC(''); setAltD(''); setAltE('');
-      setComentario('');
-
+      resetarFormulario();
       setTimeout(() => setSucesso(false), 3000);
 
     } catch (error) {
@@ -164,13 +126,6 @@ export default function AdminNovaQuestao() {
   };
 
   const turmaAtual = turmas.find((t) => t.id === turmaId);
-  const alternativasPreview = [
-    { letra: 'A', texto: altA },
-    { letra: 'B', texto: altB },
-    { letra: 'C', texto: altC },
-    { letra: 'D', texto: altD },
-    { letra: 'E', texto: altE },
-  ];
 
   return (
     <div className="min-h-screen bg-slate-50 p-6 md:p-8 font-sans">
@@ -185,7 +140,7 @@ export default function AdminNovaQuestao() {
               <PlusCircle className="w-6 h-6 text-brand-orange" />
               Adicionar Nova Questão
             </h1>
-            <p className="text-sm text-slate-500 font-medium mt-1">Alimente o banco de questões com blocos flexíveis em linha.</p>
+            <p className="text-sm text-slate-500 font-medium mt-1">Enunciado e alternativas com texto e imagem intercalados.</p>
           </div>
         </div>
 
@@ -196,198 +151,115 @@ export default function AdminNovaQuestao() {
           </div>
         )}
 
-        {/* LAYOUT DE 2 COLUNAS: FORMULÁRIO + PREVIEW AO VIVO */}
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_420px] gap-6 items-start">
 
-          {/* COLUNA ESQUERDA: FORMULÁRIO */}
+          {/* FORMULÁRIO */}
           <form onSubmit={handleSubmit} className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200 space-y-8">
 
-            {/* BLOCO 1: Classificação */}
+            {/* Classificação */}
             <div>
               <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Classificação</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">Turma / Nicho</label>
-                  <select value={turmaId} onChange={(e) => setTurmaId(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 font-medium">
-                    {turmas.map(t => (
-                      <option key={t.id} value={t.id}>{t.nome}</option>
-                    ))}
+                  <select value={turmaId} onChange={(e) => setTurmaId(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium">
+                    {turmas.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
                   </select>
                 </div>
-
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">Matéria</label>
-                  <input required type="text" value={materia} onChange={(e) => setMateria(e.target.value)} placeholder="Ex: Matemática" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 font-medium" />
+                  <input required type="text" value={materia} onChange={(e) => setMateria(e.target.value)} placeholder="Ex: Matemática" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium" />
                 </div>
-
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">Assunto</label>
-                  <input required type="text" value={assunto} onChange={(e) => setAssunto(e.target.value)} placeholder="Ex: Geometria Plana" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 font-medium" />
+                  <input required type="text" value={assunto} onChange={(e) => setAssunto(e.target.value)} placeholder="Ex: Estatística" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium" />
                 </div>
-
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">Dificuldade</label>
-                  <select value={dificuldade} onChange={(e) => setDificuldade(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 font-medium">
+                  <select value={dificuldade} onChange={(e) => setDificuldade(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium">
                     <option value="facil">Fácil</option>
                     <option value="medio">Médio</option>
                     <option value="dificil">Difícil</option>
                   </select>
                 </div>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">Banca (Opcional)</label>
-                  <input type="text" value={banca} onChange={(e) => setBanca(e.target.value)} placeholder="Ex: INEP, FGV..." className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 font-medium" />
+                  <input type="text" value={banca} onChange={(e) => setBanca(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium" />
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">Ano (Opcional)</label>
-                  <input type="number" value={ano} onChange={(e) => setAno(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 font-medium" />
+                  <input type="number" value={ano} onChange={(e) => setAno(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium" />
                 </div>
               </div>
             </div>
 
-            {/* BLOCO 2: Construtor de Enunciado em Blocos (Texto e Imagens Inline) */}
+            {/* Enunciado em blocos */}
             <div>
-              <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-2">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Editor de Enunciado (Blocos Inline)</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Intercale textos e imagens na mesma linha do texto.</p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => adicionarBloco('texto')}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition-colors"
-                  >
-                    <Type className="w-3.5 h-3.5" /> + Texto
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => adicionarBloco('imagem')}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-brand-orange rounded-xl font-bold text-xs transition-colors"
-                  >
-                    <ImagePlus className="w-3.5 h-3.5" /> + Imagem
-                  </button>
-                </div>
-              </div>
+              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1 border-b border-slate-100 pb-2">Enunciado</h3>
+              <p className="text-xs text-slate-500 mb-3">Intercale trechos de texto e imagens pequenas na ordem que devem aparecer.</p>
+              <BlocoEditor blocos={blocosEnunciado} onChange={setBlocosEnunciado} />
+            </div>
 
-              <div className="space-y-4">
-                {blocos.map((bloco, index) => (
-                  <div key={bloco.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl relative group">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-bold text-slate-400 uppercase">
-                        Bloco #{index + 1} ({bloco.tipo === 'texto' ? 'Texto' : 'Imagem'})
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => moverBloco(index, -1)}
-                          disabled={index === 0}
-                          className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30"
-                          title="Mover para cima"
-                        >
-                          <ArrowUp className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => moverBloco(index, 1)}
-                          disabled={index === blocos.length - 1}
-                          className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30"
-                          title="Mover para baixo"
-                        >
-                          <ArrowDown className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removerBloco(bloco.id)}
-                          className="p-1 text-red-400 hover:text-red-600 ml-2"
-                          title="Remover bloco"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {bloco.tipo === 'texto' ? (
-                      <input
-                        type="text"
-                        required
-                        value={bloco.valor}
-                        onChange={(e) => atualizarBlocoTexto(bloco.id, e.target.value)}
-                        placeholder="Digite o trecho do texto..."
-                        className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium text-sm"
-                      />
-                    ) : (
-                      <div>
-                        {!bloco.valor ? (
-                          <label className="flex flex-col items-center justify-center cursor-pointer h-28 border-2 border-dashed border-slate-300 rounded-xl bg-white hover:bg-slate-50 transition-all">
-                            <ImagePlus className="w-7 h-7 text-slate-400 mb-1" />
-                            <span className="text-xs font-bold text-slate-700">Clique para enviar ícone/imagem inline</span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={(e) => atualizarBlocoImagem(bloco.id, e)}
-                              className="hidden"
-                            />
-                          </label>
-                        ) : (
-                          <div className="relative inline-block">
-                            <img src={bloco.valor} alt="Preview Inline" className="h-12 w-auto object-contain rounded border border-slate-200 bg-white p-0.5" />
-                            <button
-                              type="button"
-                              onClick={() => setblocosState(bloco.id, { valor: '', file: null })}
-                              className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 shadow-md"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
+            {/* Gráfico / imagem principal */}
+            <div>
+              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Gráfico / Imagem Principal (Opcional)</h3>
+              <p className="text-xs text-slate-500 mb-3">Exibida em destaque, abaixo do enunciado — para gráficos, tabelas ou figuras grandes.</p>
+              <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl p-4 text-center">
+                {!imagemPrincipalPreview ? (
+                  <label className="cursor-pointer flex flex-col items-center justify-center py-4">
+                    <ImagePlus className="w-8 h-8 text-slate-400 mb-2" />
+                    <span className="text-xs font-bold text-slate-700">Clique para enviar o gráfico principal</span>
+                    <input type="file" accept="image/*" onChange={handleImagemPrincipalChange} className="hidden" />
+                  </label>
+                ) : (
+                  <div className="relative inline-block">
+                    <img src={imagemPrincipalPreview} alt="Principal" className="max-h-48 mx-auto rounded-xl border bg-white p-1 object-contain" />
+                    <button type="button" onClick={removerImagemPrincipal} className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1.5 shadow transition-colors">
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
-                ))}
+                )}
               </div>
             </div>
 
-            {/* BLOCO 3: Alternativas */}
+            {/* Alternativas */}
             <div>
               <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-2">
                 <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Alternativas</h3>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm font-bold text-slate-600">Gabarito Correto:</span>
-                  <select value={respostaCorreta} onChange={(e) => setRespostaCorreta(e.target.value)} className="p-2 bg-brand-orange text-white rounded-lg font-bold outline-none cursor-pointer">
-                    <option value="A">Letra A</option>
-                    <option value="B">Letra B</option>
-                    <option value="C">Letra C</option>
-                    <option value="D">Letra D</option>
-                    <option value="E">Letra E</option>
+                  <span className="text-sm font-bold text-slate-600">Gabarito:</span>
+                  <select value={respostaCorreta} onChange={(e) => setRespostaCorreta(e.target.value)} className="p-2 bg-brand-orange text-white rounded-lg font-bold outline-none">
+                    {LETRAS.map((l) => <option key={l} value={l}>Letra {l}</option>)}
                   </select>
                 </div>
               </div>
 
               <div className="space-y-3">
-                {[
-                  { letra: 'A', state: altA, set: setAltA },
-                  { letra: 'B', state: altB, set: setAltB },
-                  { letra: 'C', state: altC, set: setAltC },
-                  { letra: 'D', state: altD, set: setAltD },
-                  { letra: 'E', state: altE, set: setAltE },
-                ].map((item) => (
-                  <div key={item.letra} className="flex items-center gap-3">
-                    <div className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center font-black text-sm transition-colors ${respostaCorreta === item.letra ? 'bg-brand-orange text-white' : 'bg-slate-100 text-slate-500'}`}>
-                      {item.letra}
+                {LETRAS.map((letra) => (
+                  <div key={letra} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${respostaCorreta === letra ? 'bg-brand-orange text-white' : 'bg-slate-200 text-slate-700'}`}>
+                        {letra}
+                      </span>
+                      <div className="flex-1">
+                        <BlocoEditor
+                          compact
+                          blocos={alternativasBlocos[letra]}
+                          onChange={(novos) => setAlternativasBlocos((prev) => ({ ...prev, [letra]: novos }))}
+                        />
+                      </div>
                     </div>
-                    <input required type="text" value={item.state} onChange={(e) => item.set(e.target.value)} placeholder={`Texto da alternativa ${item.letra}...`} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 font-medium" />
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* BLOCO 4: Comentário do Professor */}
+            {/* Comentário */}
             <div>
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Resolução (Opcional)</h3>
-              <textarea value={comentario} onChange={(e) => setComentario(e.target.value)} rows="3" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 font-medium resize-y" placeholder="Explique o passo a passo da resposta correta..."></textarea>
+              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">Resolução (Opcional)</h3>
+              <textarea value={comentario} onChange={(e) => setComentario(e.target.value)} rows="3" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium resize-y" placeholder="Explique o passo a passo da resposta correta..."></textarea>
             </div>
 
             <div className="pt-4 flex justify-end">
@@ -399,54 +271,57 @@ export default function AdminNovaQuestao() {
 
           </form>
 
-          {/* COLUNA DIREITA: PREVIEW AO VIVO COM FLUXO INLINE */}
+          {/* PREVIEW AO VIVO */}
           <div className="xl:sticky xl:top-8">
             <div className="flex items-center gap-2 mb-3 px-1">
               <Eye className="w-4 h-4 text-slate-400" />
               <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Como o aluno vai ver</h3>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                <span className="bg-slate-100 px-2.5 py-1 rounded-lg uppercase">{materia || 'Matéria'}</span>
-                <span className="capitalize">{dificuldade}</span>
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+              <div className="bg-slate-50 border-b border-slate-100 px-5 py-3 flex items-center justify-between text-xs font-bold">
+                <span className="text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md">{materia || 'Matéria'}</span>
+                <span className="text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">{assunto || 'Assunto'}</span>
+                <span className="text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md capitalize">{dificuldade}</span>
               </div>
 
-              {/* ENUNCIADO FLUIDO INLINE */}
-              <div className="flex flex-wrap items-center gap-2 text-slate-800 font-medium text-base leading-relaxed">
-                {blocos.map((bloco, idx) => (
-                  bloco.tipo === 'texto' ? (
-                    <span key={idx} className="inline-block">
-                      {bloco.valor || (idx === 0 ? 'Escreva o texto...' : '')}
-                    </span>
-                  ) : (
-                    bloco.valor ? (
-                      <img key={idx} src={bloco.valor} alt="Inline" className="inline-block h-8 w-auto object-contain align-middle mx-1 rounded border border-slate-200 bg-white" />
-                    ) : (
-                      <span key={idx} className="inline-block bg-slate-100 text-slate-400 px-2 py-0.5 rounded text-xs border border-dashed border-slate-300">
-                        [Imagem]
+              <div className="p-5">
+                <p className="text-slate-800 font-medium leading-relaxed mb-4">
+                  <RenderBlocos blocos={blocosEnunciado} placeholder="O enunciado aparece aqui conforme você digita..." />
+                </p>
+
+                {imagemPrincipalPreview && (
+                  <img src={imagemPrincipalPreview} alt="Gráfico" className="rounded-xl border border-slate-200 max-h-56 mx-auto mb-5 object-contain" />
+                )}
+
+                <div className="space-y-2.5">
+                  {LETRAS.map((letra) => (
+                    <div
+                      key={letra}
+                      className={`w-full flex items-center gap-3 p-3 rounded-xl border ${
+                        respostaCorreta === letra ? 'border-brand-orange bg-orange-50/60' : 'border-slate-200 bg-white'
+                      }`}
+                    >
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-black text-xs shrink-0 ${
+                        respostaCorreta === letra ? 'bg-brand-orange text-white' : 'bg-slate-100 text-slate-500'
+                      }`}>
+                        {letra}
+                      </div>
+                      <span className="font-medium text-sm text-slate-700">
+                        <RenderBlocos blocos={alternativasBlocos[letra]} imgHeight="h-8" placeholder={`Alternativa ${letra}`} />
                       </span>
-                    )
-                  )
-                ))}
-              </div>
-
-              {/* ALTERNATIVAS PREVIEW */}
-              <div className="space-y-2 pt-2 border-t border-slate-100">
-                {alternativasPreview.map((alt) => (
-                  <div key={alt.letra} className={`p-3 rounded-xl border text-sm font-medium flex items-center gap-3 ${respostaCorreta === alt.letra ? 'border-brand-orange bg-orange-50/50 text-slate-900' : 'border-slate-200 bg-slate-50/50 text-slate-700'}`}>
-                    <span className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs ${respostaCorreta === alt.letra ? 'bg-brand-orange text-white' : 'bg-slate-200 text-slate-600'}`}>
-                      {alt.letra}
-                    </span>
-                    <span>{alt.texto || `Alternativa ${alt.letra}...`}</span>
-                  </div>
-                ))}
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {comentario && (
-                <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-900 mt-2">
-                  <span className="font-bold block mb-0.5">Resolução:</span>
-                  {comentario}
+                <div className="px-5 py-4 bg-orange-50/60 border-t border-orange-100">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-6 h-6 bg-brand-orange rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0">P</div>
+                    <h4 className="font-black text-slate-800 text-sm">Resolução do Professor</h4>
+                  </div>
+                  <p className="text-sm text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">{comentario}</p>
                 </div>
               )}
             </div>

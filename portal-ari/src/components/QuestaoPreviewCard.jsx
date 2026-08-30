@@ -1,17 +1,23 @@
 import React from 'react';
+import { BookOpen } from 'lucide-react';
+import RenderBlocos from './RenderBlocos';
 
 const DIFICULDADE_STYLE = {
   facil: 'bg-emerald-50 text-emerald-700',
   medio: 'bg-amber-50 text-amber-700',
   dificil: 'bg-red-50 text-red-700',
 };
-
 const DIFICULDADE_LABEL = { facil: 'Fácil', medio: 'Médio', dificil: 'Difícil' };
 
+// Card usado tanto no preview ao vivo (Nova Questão) quanto na
+// visualização de uma questão já cadastrada (Simulados e Questões).
+// Fiel ao card que o aluno vê no Banco de Questões.
+// Suporta o formato antigo (enunciado texto + imagem_url única) e o
+// novo formato de blocos (blocosEnunciado / alternativas com blocos).
 export default function QuestaoPreviewCard({
   materia,
   assunto,
-  dificuldade,
+  dificuldade = 'medio',
   enunciado,
   blocosEnunciado,
   imagemUrl,
@@ -19,81 +25,71 @@ export default function QuestaoPreviewCard({
   respostaCorreta,
   comentario,
 }) {
+  const temBlocos = blocosEnunciado && blocosEnunciado.length > 0;
+
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4 font-sans text-slate-800">
-      
-      {/* Cabeçalho do Card */}
-      <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-        <span className="bg-slate-100 px-2.5 py-1 rounded-lg uppercase">
-          {materia || 'Matéria'} {assunto ? `> ${assunto}` : ''}
-        </span>
-        {dificuldade && (
-          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${DIFICULDADE_STYLE[dificuldade] || 'bg-slate-100 text-slate-600'}`}>
-            {DIFICULDADE_LABEL[dificuldade] || dificuldade}
+    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+      <div className="bg-slate-50 border-b border-slate-100 px-5 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md flex items-center gap-1">
+            <BookOpen className="w-3 h-3" /> {materia || 'Matéria'}
           </span>
-        )}
+          <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">
+            {assunto || 'Assunto'}
+          </span>
+          <span className={`text-xs font-bold px-2.5 py-1 rounded-md ${DIFICULDADE_STYLE[dificuldade]}`}>
+            {DIFICULDADE_LABEL[dificuldade]}
+          </span>
+        </div>
       </div>
 
-      {/* Enunciado Dinâmico (Blocos Inline ou Legado) */}
-      <div className="flex flex-wrap items-center gap-2 text-slate-900 font-medium text-base leading-relaxed">
-        {blocosEnunciado && blocosEnunciado.length > 0 ? (
-          blocosEnunciado.map((bloco, idx) => (
-            bloco.tipo === 'texto' ? (
-              <span key={idx} className="inline-block">
-                {bloco.valor}
-              </span>
-            ) : (
-              <img 
-                key={idx} 
-                src={bloco.valor} 
-                alt="Ilustração inline" 
-                className="inline-block h-8 w-auto object-contain align-middle mx-1 rounded border border-slate-200 bg-white" 
-              />
-            )
-          ))
-        ) : (
-          // Fallback para o modo legado caso venha texto simples
-          <>
-            <span className="inline-block">{enunciado || 'Enunciado da questão...'}</span>
-            {imagemUrl && (
-              <img src={imagemUrl} alt="Questão" className="inline-block h-10 w-auto object-contain align-middle mx-1 rounded border border-slate-200 bg-white" />
-            )}
-          </>
-        )}
-      </div>
+      <div className="p-5">
+        <p className="text-slate-800 font-medium leading-relaxed mb-5 whitespace-pre-wrap">
+          {temBlocos ? (
+            <RenderBlocos blocos={blocosEnunciado} placeholder="O enunciado aparece aqui conforme você digita..." />
+          ) : (
+            enunciado || <span className="text-slate-300 italic">O enunciado aparece aqui conforme você digita...</span>
+          )}
+        </p>
 
-      {/* Alternativas */}
-      <div className="space-y-2 pt-2 border-t border-slate-100">
-        {alternativas.map((alt) => {
-          const isCorreta = respostaCorreta === alt.letra;
-          return (
-            <div 
-              key={alt.letra} 
-              className={`p-3 rounded-xl border text-sm font-medium flex items-center gap-3 transition-colors ${
-                isCorreta 
-                  ? 'border-brand-orange bg-orange-50/50 text-slate-900' 
-                  : 'border-slate-200 bg-slate-50/50 text-slate-700'
+        {imagemUrl && (
+          <img src={imagemUrl} alt="Gráfico" className="rounded-xl border border-slate-200 max-h-56 mx-auto mb-5 object-contain" />
+        )}
+
+        <div className="space-y-2.5">
+          {alternativas.map((alt) => (
+            <div
+              key={alt.letra}
+              className={`w-full flex items-center gap-3 p-3 rounded-xl border ${
+                respostaCorreta === alt.letra ? 'border-brand-orange bg-orange-50/60' : 'border-slate-200 bg-white'
               }`}
             >
-              <span className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
-                isCorreta ? 'bg-brand-orange text-white' : 'bg-slate-200 text-slate-600'
+              <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-black text-xs shrink-0 ${
+                respostaCorreta === alt.letra ? 'bg-brand-orange text-white' : 'bg-slate-100 text-slate-500'
               }`}>
                 {alt.letra}
+              </div>
+              <span className="font-medium text-sm text-slate-700">
+                {alt.blocos && alt.blocos.length > 0 ? (
+                  <RenderBlocos blocos={alt.blocos} imgHeight="h-8" placeholder={`Alternativa ${alt.letra}`} />
+                ) : (
+                  alt.texto || <span className="text-slate-300 italic">Alternativa {alt.letra}</span>
+                )}
               </span>
-              <span className="leading-normal">{alt.texto || `Alternativa ${alt.letra}...`}</span>
             </div>
-          );
-        })}
+          ))}
+        </div>
       </div>
 
-      {/* Comentário / Resolução */}
       {comentario && (
-        <div className="p-3.5 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-900 mt-3 space-y-1">
-          <span className="font-bold block text-blue-950 uppercase tracking-wider text-[10px]">Resolução Comentada:</span>
-          <p className="leading-relaxed">{comentario}</p>
+        <div className="px-5 py-4 bg-orange-50/60 border-t border-orange-100">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-6 h-6 bg-brand-orange rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0">P</div>
+            <h4 className="font-black text-slate-800 text-sm">Resolução do Professor</h4>
+          </div>
+          <p className="text-sm text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">{comentario}</p>
         </div>
       )}
-
     </div>
   );
 }
