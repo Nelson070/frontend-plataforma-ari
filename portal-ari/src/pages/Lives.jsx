@@ -7,8 +7,24 @@ import Sidebar from './Sidebar';
 export default function Lives() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [aulasLives, setAulasLives] = useState([]);
+  const [listaLives, setListaLives] = useState([]);
   const [perfil, setPerfil] = useState(null);
+
+  // Função para calcular o status da live com base na data/hora atual
+  const calcularStatus = (dataHoraStr) => {
+    if (!dataHoraStr) return 'Agendada';
+    const agora = new Date();
+    const dataLive = new Date(dataHoraStr);
+    const diffMinutos = (dataLive - agora) / (1000 * 60);
+
+    if (diffMinutos <= 15 && diffMinutos >= -120) {
+      return 'Ao Vivo'; // Começa 15 min antes e dura até 2h depois
+    } else if (agora > dataLive) {
+      return 'Encerrada';
+    } else {
+      return 'Agendada';
+    }
+  };
 
   useEffect(() => {
     async function carregarDados() {
@@ -25,15 +41,15 @@ export default function Lives() {
         setPerfil(userProfile);
 
         if (userProfile?.turma_id) {
-          // Buscamos as aulas/lives cadastradas para a turma
+          // Buscamos as lives cadastradas na tabela 'lives' para a turma do aluno
           const { data, error } = await supabase
-            .from('aulas')
+            .from('lives')
             .select('*')
             .eq('turma_id', userProfile.turma_id)
-            .order('ordem', { ascending: true });
+            .order('data_hora', { ascending: true });
 
           if (error) throw error;
-          setAulasLives(data || []);
+          setListaLives(data || []);
         }
       } catch (error) {
         console.error('Erro ao carregar lives:', error);
@@ -93,44 +109,75 @@ export default function Lives() {
               </div>
             </div>
 
-            {/* Lista de Aulas/Lives Disponíveis */}
+            {/* Lista de Lives Disponíveis */}
             <div className="space-y-4">
-              <h3 className="font-black text-slate-900 text-lg">Conteúdos Disponíveis</h3>
+              <h3 className="font-black text-slate-900 text-lg">Próximas Transmissões e Lives</h3>
 
-              {aulasLives.length === 0 ? (
+              {listaLives.length === 0 ? (
                 <div className="bg-white rounded-3xl p-12 text-center border border-slate-200">
                   <Video className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                  <h4 className="text-lg font-bold text-slate-700">Nenhuma aula cadastrada</h4>
-                  <p className="text-slate-500 text-sm mt-1">O professor ainda não publicou conteúdos para esta turma.</p>
+                  <h4 className="text-lg font-bold text-slate-700">Nenhuma live agendada</h4>
+                  <p className="text-slate-500 text-sm mt-1">O professor ainda não publicou lives para esta turma.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {aulasLives.map((aula) => (
-                    <div key={aula.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between hover:border-brand-orange/50 transition-all">
-                      <div>
-                        <div className="flex justify-between items-start mb-3">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-orange bg-orange-50 px-2.5 py-1 rounded-md">
-                            {aula.modulo_nome}
-                          </span>
-                          <span className="text-xs font-bold text-slate-400">Aula {aula.ordem}</span>
-                        </div>
-                        <h4 className="font-black text-slate-900 text-lg mb-2 leading-snug">{aula.titulo}</h4>
-                      </div>
+                  {listaLives.map((live) => {
+                    const status = calcularStatus(live.data_hora);
+                    
+                    return (
+                      <div key={live.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between hover:border-brand-orange/50 transition-all">
+                        <div>
+                          <div className="flex justify-between items-start mb-3">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 bg-slate-100 px-2.5 py-1 rounded-md">
+                              {live.professor || 'Prof. Ari'}
+                            </span>
+                            
+                            {/* Badge dinâmica de Status */}
+                            {status === 'Ao Vivo' && (
+                              <span className="text-xs font-bold text-red-600 bg-red-50 px-2.5 py-1 rounded-lg flex items-center gap-1 animate-pulse">
+                                <span className="w-2 h-2 rounded-full bg-red-500"></span> AO VIVO
+                              </span>
+                            )}
+                            {status === 'Agendada' && (
+                              <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">
+                                Agendada
+                              </span>
+                            )}
+                            {status === 'Encerrada' && (
+                              <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
+                                Encerrada
+                              </span>
+                            )}
+                          </div>
 
-                      <div className="pt-4 border-t border-slate-100 flex items-center justify-between mt-4">
-                        <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg flex items-center gap-1">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> Disponível
-                        </span>
-                        
-                        <Link 
-                          to="/player" 
-                          className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all"
-                        >
-                          <PlayCircle className="w-4 h-4" /> Assistir Aula
-                        </Link>
+                          <h4 className="font-black text-slate-900 text-lg mb-1 leading-snug">{live.titulo}</h4>
+                          <p className="text-xs font-medium text-slate-500 flex items-center gap-1.5 mt-2">
+                            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                            {live.data_hora ? new Date(live.data_hora).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'Data a definir'}
+                          </p>
+                        </div>
+
+                        <div className="pt-4 border-t border-slate-100 flex items-center justify-between mt-4">
+                          <span className="text-xs font-medium text-slate-400">
+                            {status === 'Encerrada' ? 'Transmissão finalizada' : 'Acesse no horário marcado'}
+                          </span>
+                          
+                          {live.link_transmissao ? (
+                            <Link 
+                              to={`/live/${live.id}`}
+                              className="flex items-center gap-2 px-5 py-2.5 bg-brand-orange hover:bg-orange-600 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-orange-500/20"
+                            >
+                              <Radio className="w-4 h-4" /> Assistir ao Vivo
+                            </Link>
+                          ) : (
+                            <button disabled className="px-4 py-2 bg-slate-100 text-slate-400 rounded-xl text-xs font-bold cursor-not-allowed">
+                              Link em breve
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

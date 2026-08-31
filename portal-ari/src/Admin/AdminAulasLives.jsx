@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabaseClient';
 
 const STATUS_LIVE_STYLE = {
   Agendada: 'bg-blue-50 text-blue-700',
+  'Ao Vivo': 'bg-red-50 text-red-600 animate-pulse',
   Encerrada: 'bg-slate-100 text-slate-500',
 };
 
@@ -59,21 +60,36 @@ export default function AdminAulasLives() {
     if (fetchLives) fetchLives();
   };
 
+  // Função auxiliar para converter link do YouTube em formato Embed
+  const formatarUrlVideo = (url) => {
+    if (!url) return '';
+    if (url.includes('embed')) return url;
+    const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+    if (match && match[1]) {
+      return `https://www.youtube.com/embed/${match[1]}`;
+    }
+    return url;
+  };
+
   // Salvar Videoaula
-  const handleSalvarVideoaula = async (e) => {
+const handleSalvarVideoaula = async (e) => {
     e.preventDefault();
     if (!tituloV || !turmaIdV) return alert('Preencha os campos obrigatórios.');
 
     setSalvando(true);
     try {
-      const { error } = await supabase.from('aulas').insert({
+      const urlFormatada = formatarUrlVideo(videoUrlV);
+
+      const dadosAula = {
         titulo: tituloV,
-        modulo_nome: moduloV,
+        modulo_nome: moduloV || 'Módulo Geral',
         turma_id: turmaIdV,
         duracao_min: duracaoV ? Number(duracaoV) : null,
-        video_url: videoUrlV,
-        ordem: videoaulas.length + 1
-      });
+        video_url: urlFormatada,
+        ordem: videoaulas.length + 1 // 👈 Adicionado aqui para satisfazer a restrição do banco!
+      };
+
+      const { error } = await supabase.from('aulas').insert(dadosAula);
 
       if (error) throw error;
 
@@ -87,12 +103,12 @@ export default function AdminAulasLives() {
       if (fetchVideoaulas) fetchVideoaulas();
     } catch (err) {
       console.error('Erro ao cadastrar videoaula:', err);
-      alert('Erro ao salvar videoaula.');
+      alert('Erro ao salvar videoaula: ' + (err.message || 'Erro desconhecido'));
     } finally {
       setSalvando(false);
     }
   };
-
+  
   // Abrir Edição de Videoaula
   const abrirEdicaoVideo = (v) => {
     setVideoEmEdicao(v);
@@ -112,12 +128,14 @@ export default function AdminAulasLives() {
 
     setSalvando(true);
     try {
+      const urlFormatada = formatarUrlVideo(videoUrlV);
+
       const { error } = await supabase.from('aulas').update({
         titulo: tituloV,
         modulo_nome: moduloV,
         turma_id: turmaIdV,
         duracao_min: duracaoV ? Number(duracaoV) : null,
-        video_url: videoUrlV,
+        video_url: urlFormatada,
       }).eq('id', videoEmEdicao.id);
 
       if (error) throw error;
@@ -128,7 +146,7 @@ export default function AdminAulasLives() {
       if (fetchVideoaulas) fetchVideoaulas();
     } catch (err) {
       console.error('Erro ao atualizar videoaula:', err);
-      alert('Erro ao atualizar videoaula.');
+      alert('Erro ao atualizar videoaula: ' + err.message);
     } finally {
       setSalvando(false);
     }
@@ -141,11 +159,13 @@ export default function AdminAulasLives() {
 
     setSalvando(true);
     try {
+      const dataIso = new Date(dataHoraL).toISOString();
+
       const { error } = await supabase.from('lives').insert({
         titulo: tituloL,
         professor: professorL,
         turma_id: turmaIdL,
-        data_hora: dataHoraL,
+        data_hora: dataIso,
         link_transmissao: linkL
       });
 
@@ -160,7 +180,7 @@ export default function AdminAulasLives() {
       if (fetchLives) fetchLives();
     } catch (err) {
       console.error('Erro ao agendar live:', err);
-      alert('Erro ao salvar live.');
+      alert('Erro ao salvar live: ' + err.message);
     } finally {
       setSalvando(false);
     }
@@ -172,12 +192,11 @@ export default function AdminAulasLives() {
     setTituloL(l.titulo || '');
     setProfessorL(l.professor || 'Prof. Ari');
     setTurmaIdL(l.turma_id || '');
-    // Formatar data para o input datetime-local (YYYY-MM-DDTHH:mm)
     if (l.data_hora) {
       const formattedDate = new Date(l.data_hora).toISOString().slice(0, 16);
       setDataHoraL(formattedDate);
     }
-    setLinkL(l.link_transmissao || '');
+    setLinkL(l.url_embed || l.link_transmissao || '');
     setModalEditLiveAberto(true);
     setMenuAberto(null);
   };
@@ -189,11 +208,13 @@ export default function AdminAulasLives() {
 
     setSalvando(true);
     try {
+      const dataIso = new Date(dataHoraL).toISOString();
+
       const { error } = await supabase.from('lives').update({
         titulo: tituloL,
         professor: professorL,
         turma_id: turmaIdL,
-        data_hora: dataHoraL,
+        data_hora: dataIso,
         link_transmissao: linkL
       }).eq('id', liveEmEdicao.id);
 
@@ -205,7 +226,7 @@ export default function AdminAulasLives() {
       if (fetchLives) fetchLives();
     } catch (err) {
       console.error('Erro ao atualizar live:', err);
-      alert('Erro ao atualizar live.');
+      alert('Erro ao atualizar live: ' + err.message);
     } finally {
       setSalvando(false);
     }
@@ -416,7 +437,13 @@ export default function AdminAulasLives() {
                                 <MoreHorizontal className="w-4.5 h-4.5" />
                               </button>
                               {menuAberto === l.id && (
-                                <div className="absolute right-6 top-10 z-10 bg-white border border-slate-200 rounded-xl shadow-lg py-1.5 w-36 text-left">
+                                <div className="absolute right-6 top-10 z-10 bg-white border border-slate-200 rounded-xl shadow-lg py-1.5 w-40 text-left">
+                                  <Link
+                                    to={`/admin/live-control/${l.id}`}
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-50 transition-colors"
+                                  >
+                                    <Radio className="w-3.5 h-3.5" /> Entrar na Live
+                                  </Link>
                                   <button
                                     onClick={() => abrirEdicaoLive(l)}
                                     className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"

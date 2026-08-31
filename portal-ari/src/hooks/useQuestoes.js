@@ -39,22 +39,61 @@ export function useQuestoes({ materia, assunto, dificuldade, busca, pagina = 0, 
     carregar();
   }, [carregar]);
 
-  // Salva a resposta do aluno e retorna se acertou (não expõe a resposta_correta em texto).
   async function responder(questaoId, alternativaEscolhida, respostaCorreta) {
-    const correta = alternativaEscolhida === respostaCorreta;
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { correta, error: new Error('Usuário não autenticado') };
-
-    const { error } = await supabase.from('respostas_questoes').insert({
-      user_id: user.id,
-      questao_id: questaoId,
-      alternativa_escolhida: alternativaEscolhida,
-      correta,
-    });
-
-    return { correta, error };
+    return responderQuestaoAvulsa(questaoId, alternativaEscolhida, respostaCorreta);
   }
 
   return { questoes, total, loading, error, recarregar: carregar, responder };
+}
+
+// Versão "solta" de responder, sem precisar instanciar o hook inteiro —
+// útil dentro do modo de resolução do Simulado, por exemplo.
+export async function responderQuestaoAvulsa(questaoId, alternativaEscolhida, respostaCorreta) {
+  const correta = alternativaEscolhida === respostaCorreta;
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { correta, error: new Error('Usuário não autenticado') };
+
+  const { error } = await supabase.from('respostas_questoes').insert({
+    user_id: user.id,
+    questao_id: questaoId,
+    alternativa_escolhida: alternativaEscolhida,
+    correta,
+  });
+
+  return { correta, error };
+}
+
+// Assuntos únicos disponíveis (já filtrados pela turma via RLS) —
+// usado no hub de Simulados, aba "Por Assunto".
+export function useAssuntosDisponiveis() {
+  const [assuntos, setAssuntos] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.from('questoes').select('assunto').then(({ data, error }) => {
+      if (!error && data) {
+        const unicos = [...new Set(data.map((q) => q.assunto))].sort();
+        setAssuntos(unicos);
+      }
+      setLoading(false);
+    });
+  }, []);
+
+  return { assuntos, loading };
+}
+
+// Busca um lote de questões pra montar um simulado (por assunto ou
+// personalizado) e embaralha no cliente — o Supabase JS não tem
+// "order by random()" direto sem uma função RPC dedicada.
+export async function buscarQuestoesParaSimulado({ assunto, dificuldade, quantidade }) {
+  let query = supabase.from('questoes').select('id, dificuldade');
+  if (assunto) query = query.eq('assunto', assunto);
+  if (dificuldade && dificuldade !== 'misto') query = query.eq('dificuldade', dificuldade);
+
+  const { data, error } = await query;
+  if (error) return { questaoIds: [], error };
+
+  const embaralhado = [...(data ?? [])].sort(() => Math.random() - 0.5);
+  return { questaoIds: embaralhado.slice(0, quantidade).map((q) => q.id), error: null };
 }

@@ -11,12 +11,14 @@ import Dashboard from './pages/Dashboard';
 import Simulados from './pages/Simulados';
 import Lives from './pages/Lives';
 import PlayerAulas from './pages/PlayerAulas';
+import PlayerLive from './pages/LivePlayer';
 import Home from './pages/Home';
 import AdminDashboard from './Admin/AdminDashboard';
 import AdminConfiguracoes from './Admin/AdminConfiguracoes';
 import AdminAlunos from './Admin/AdminAlunos';
 import AdminSimuladosQuestoes from './Admin/AdminSimuladosQuestoes';
 import AdminAulasLives from './Admin/AdminAulasLives';
+import AdminLiveController from './Admin/AdminLiveController';
 import AdminNovaQuestao from './pages/AdminNovaQuestao';
 import AdminNovoSimulado from './Admin/AdminNovoSimulado';
 import AdminAssuntos from './Admin/AdminAssuntos';
@@ -44,6 +46,10 @@ function App() {
           <Route path="/banco-questoes" element={<ProtectedRoute><BancoQuestoes /></ProtectedRoute>} />
           <Route path="/desempenho" element={<ProtectedRoute><Desempenho /></ProtectedRoute>} />
           <Route path="/plano-estudos" element={<ProtectedRoute><PlanoEstudos /></ProtectedRoute>} />
+          
+          {/* 👈 Rota do Player de Live do Aluno (Essencial para não dar 404) */}
+          <Route path="/live/:id" element={<ProtectedRoute><PlayerLive /></ProtectedRoute>} />
+
           <Route path="/assuntos-enem" element={<ProtectedRoute><AssuntosEnem /></ProtectedRoute>} />
           <Route path="/ranking" element={<ProtectedRoute><Ranking /></ProtectedRoute>} />
 
@@ -53,6 +59,10 @@ function App() {
           <Route path="/admin/alunos" element={<AdminRoute><AdminAlunos /></AdminRoute>} />
           <Route path="/admin/simulados-questoes" element={<AdminRoute><AdminSimuladosQuestoes /></AdminRoute>} />
           <Route path="/admin/aulas-lives" element={<AdminRoute><AdminAulasLives /></AdminRoute>} />
+          
+          {/* 👈 Painel de Controle de Transmissão exclusivo do Admin */}
+          <Route path="/admin/live-control/:id" element={<AdminRoute><AdminLiveController /></AdminRoute>} />
+
           <Route path="/admin/questao" element={<AdminRoute><AdminNovaQuestao /></AdminRoute>} />
           <Route path="/admin/nova-questao" element={<AdminRoute><AdminNovaQuestao /></AdminRoute>} />
           <Route path="/admin/novo-simulado" element={<AdminRoute><AdminNovoSimulado /></AdminRoute>} />

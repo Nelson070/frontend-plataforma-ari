@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Search, Plus, MoreHorizontal, ChevronDown, FileQuestion, ClipboardList, Loader2, Trash2, Eye, X } from 'lucide-react';
 import AdminSidebar from './AdminSidebar';
 import { useAdminQuestoes, useAdminSimulados, useTurmas } from '../hooks/useAdmin';
+import { buscarQuestoesDoSimulado } from '../hooks/useSimulados';
 import QuestaoPreviewCard from '../components/QuestaoPreviewCard';
 
 const DIFICULDADE_STYLE = {
@@ -19,6 +20,9 @@ export default function AdminSimuladosQuestoes() {
   const [turmaFiltro, setTurmaFiltro] = useState('');
   const [menuAberto, setMenuAberto] = useState(null);
   const [questaoVisualizando, setQuestaoVisualizando] = useState(null);
+  const [simuladoVisualizando, setSimuladoVisualizando] = useState(null);
+  const [questoesDoSimulado, setQuestoesDoSimulado] = useState([]);
+  const [carregandoQuestoesSimulado, setCarregandoQuestoesSimulado] = useState(false);
 
   const { turmas } = useTurmas();
   const { questoes, loading: loadingQ, excluirQuestao } = useAdminQuestoes({ busca, turmaId: turmaFiltro || undefined });
@@ -34,6 +38,19 @@ export default function AdminSimuladosQuestoes() {
     if (!confirm('Excluir esse simulado? Essa ação não pode ser desfeita.')) return;
     await excluirSimulado(id);
     setMenuAberto(null);
+  };
+
+  const abrirVisualizacaoSimulado = async (simulado) => {
+    setSimuladoVisualizando(simulado);
+    setCarregandoQuestoesSimulado(true);
+    const { questoes } = await buscarQuestoesDoSimulado(simulado.id);
+    setQuestoesDoSimulado(questoes);
+    setCarregandoQuestoesSimulado(false);
+  };
+
+  const fecharVisualizacaoSimulado = () => {
+    setSimuladoVisualizando(null);
+    setQuestoesDoSimulado([]);
   };
 
   return (
@@ -227,7 +244,11 @@ export default function AdminSimuladosQuestoes() {
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {simulados.map((s) => (
-                          <tr key={s.id} className="hover:bg-slate-50/60 transition-colors">
+                          <tr
+                            key={s.id}
+                            onClick={() => abrirVisualizacaoSimulado(s)}
+                            className="hover:bg-slate-50/60 transition-colors cursor-pointer"
+                          >
                             <td className="px-6 py-3.5 whitespace-nowrap">
                               <span className="font-bold text-slate-900 text-sm">{s.titulo}</span>
                             </td>
@@ -242,7 +263,7 @@ export default function AdminSimuladosQuestoes() {
                             </td>
                             <td className="px-6 py-3.5 whitespace-nowrap text-right relative">
                               <button
-                                onClick={() => setMenuAberto(menuAberto === s.id ? null : s.id)}
+                                onClick={(e) => { e.stopPropagation(); setMenuAberto(menuAberto === s.id ? null : s.id); }}
                                 className="text-slate-400 hover:text-brand-orange transition-colors p-1.5"
                               >
                                 <MoreHorizontal className="w-4.5 h-4.5" />
@@ -250,7 +271,13 @@ export default function AdminSimuladosQuestoes() {
                               {menuAberto === s.id && (
                                 <div className="absolute right-6 top-10 z-10 bg-white border border-slate-200 rounded-xl shadow-lg py-1 w-40">
                                   <button
-                                    onClick={() => handleExcluirSimulado(s.id)}
+                                    onClick={(e) => { e.stopPropagation(); abrirVisualizacaoSimulado(s); setMenuAberto(null); }}
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                                  >
+                                    <Eye className="w-4 h-4" /> Visualizar
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleExcluirSimulado(s.id); }}
                                     className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
                                   >
                                     <Trash2 className="w-4 h-4" /> Excluir
@@ -314,6 +341,66 @@ export default function AdminSimuladosQuestoes() {
               respostaCorreta={questaoVisualizando.resposta_correta}
               comentario={questaoVisualizando.comentario}
             />
+          </div>
+        </div>
+      )}
+      {/* MODAL: VISUALIZAR SIMULADO */}
+      {simuladoVisualizando && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center p-4 py-8 bg-slate-900/40 backdrop-blur-sm overflow-y-auto"
+          onClick={fecharVisualizacaoSimulado}
+        >
+          <div
+            className="max-w-2xl w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 mb-4 sticky top-0 z-10 shadow-sm">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-black text-slate-900">{simuladoVisualizando.titulo}</h2>
+                  <p className="text-xs font-medium text-slate-500 mt-1 capitalize">
+                    {simuladoVisualizando.turmas?.nome || '—'} · {simuladoVisualizando.tipo} · {simuladoVisualizando.tempo_minutos} min · {questoesDoSimulado.length} questões
+                  </p>
+                </div>
+                <button
+                  onClick={fecharVisualizacaoSimulado}
+                  className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-200 transition-colors shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {carregandoQuestoesSimulado ? (
+              <div className="bg-white rounded-2xl border border-slate-200 flex items-center justify-center py-14 text-slate-400 gap-2">
+                <Loader2 className="w-5 h-5 animate-spin" /> Carregando questões...
+              </div>
+            ) : questoesDoSimulado.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-400 font-medium">
+                Esse simulado não tem questões vinculadas.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {questoesDoSimulado.map((q, i) => (
+                  <div key={q.id}>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-1">
+                      Questão {i + 1}
+                    </p>
+                    <QuestaoPreviewCard
+                      materia={q.materia}
+                      assunto={q.assunto}
+                      dificuldade={q.dificuldade}
+                      enunciado={q.enunciado}
+                      blocosEnunciado={q.blocos_enunciado}
+                      imagemUrl={q.imagem_url}
+                      alternativas={q.alternativas || []}
+                      respostaCorreta={q.resposta_correta}
+                      comentario={q.comentario}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
