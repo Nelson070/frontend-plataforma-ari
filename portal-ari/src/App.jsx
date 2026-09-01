@@ -19,6 +19,7 @@ import AdminAlunos from './Admin/AdminAlunos';
 import AdminSimuladosQuestoes from './Admin/AdminSimuladosQuestoes';
 import AdminAulasLives from './Admin/AdminAulasLives';
 import AdminLiveController from './Admin/AdminLiveController';
+import AdminModulos from './Admin/AdminModulos';
 import AdminNovaQuestao from './pages/AdminNovaQuestao';
 import AdminNovoSimulado from './Admin/AdminNovoSimulado';
 import AdminAssuntos from './Admin/AdminAssuntos';
@@ -46,7 +47,7 @@ function App() {
           <Route path="/banco-questoes" element={<ProtectedRoute><BancoQuestoes /></ProtectedRoute>} />
           <Route path="/desempenho" element={<ProtectedRoute><Desempenho /></ProtectedRoute>} />
           <Route path="/plano-estudos" element={<ProtectedRoute><PlanoEstudos /></ProtectedRoute>} />
-          
+
           {/* 👈 Rota do Player de Live do Aluno (Essencial para não dar 404) */}
           <Route path="/live/:id" element={<ProtectedRoute><PlayerLive /></ProtectedRoute>} />
 
@@ -59,7 +60,8 @@ function App() {
           <Route path="/admin/alunos" element={<AdminRoute><AdminAlunos /></AdminRoute>} />
           <Route path="/admin/simulados-questoes" element={<AdminRoute><AdminSimuladosQuestoes /></AdminRoute>} />
           <Route path="/admin/aulas-lives" element={<AdminRoute><AdminAulasLives /></AdminRoute>} />
-          
+          <Route path="/admin/modulos" element={<AdminRoute><AdminModulos /></AdminRoute>} />
+
           {/* 👈 Painel de Controle de Transmissão exclusivo do Admin */}
           <Route path="/admin/live-control/:id" element={<AdminRoute><AdminLiveController /></AdminRoute>} />
 

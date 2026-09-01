@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, Plus, MoreHorizontal, ChevronDown, PlayCircle, Radio, Loader2, Trash2, X, Edit } from 'lucide-react';
+import { Search, Plus, MoreHorizontal, ChevronDown, PlayCircle, Radio, Loader2, Trash2, X, Edit, Layers } from 'lucide-react';
 import AdminSidebar from './AdminSidebar';
 import { useAdminVideoaulas, useAdminLives, useTurmas } from '../hooks/useLives';
 import { supabase } from '../lib/supabaseClient';
@@ -28,9 +28,12 @@ export default function AdminAulasLives() {
   const [videoEmEdicao, setVideoEmEdicao] = useState(null);
   const [liveEmEdicao, setLiveEmEdicao] = useState(null);
 
+  // Módulos disponíveis para a turma selecionada no formulário de aula
+  const [modulosDisponiveis, setModulosDisponiveis] = useState([]);
+
   // Form Videoaula (Cadastro)
   const [tituloV, setTituloV] = useState('');
-  const [moduloV, setModuloV] = useState('');
+  const [moduloIdV, setModuloIdV] = useState('');
   const [turmaIdV, setTurmaIdV] = useState('');
   const [duracaoV, setDuracaoV] = useState('');
   const [videoUrlV, setVideoUrlV] = useState('');
@@ -45,6 +48,38 @@ export default function AdminAulasLives() {
   const { turmas } = useTurmas();
   const { videoaulas, loading: loadingV, excluirVideoaula, fetchVideoaulas } = useAdminVideoaulas({ busca, turmaId: turmaFiltro || undefined });
   const { lives, loading: loadingL, excluirLive, statusDaLive, fetchLives } = useAdminLives({ busca, turmaId: turmaFiltro || undefined });
+
+  // Função centralizada para buscar módulos de uma turma
+  const carregarModulosPorTurmaId = async (idTurma) => {
+    if (!idTurma) {
+      setModulosDisponiveis([]);
+      return [];
+    }
+    try {
+      const { data, error } = await supabase
+        .from('modulos')
+        .select('*')
+        .eq('turma_id', idTurma)
+        .order('ordem', { ascending: true });
+
+      if (error) throw error;
+      const lista = data || [];
+      setModulosDisponiveis(lista);
+      return lista;
+    } catch (err) {
+      console.error('Erro ao buscar módulos para o form:', err);
+      setModulosDisponiveis([]);
+      return [];
+    }
+  };
+
+  // Dispara a busca sempre que o usuário trocar a turma no select do formulário
+  const handleTrocarTurmaForm = async (e) => {
+    const novoTurmaId = e.target.value;
+    setTurmaIdV(novoTurmaId);
+    setModuloIdV(''); // Limpa o módulo selecionado ao trocar de turma
+    await carregarModulosPorTurmaId(novoTurmaId);
+  };
 
   const handleExcluirVideoaula = async (id) => {
     if (!window.confirm('Excluir essa videoaula?')) return;
@@ -72,21 +107,23 @@ export default function AdminAulasLives() {
   };
 
   // Salvar Videoaula
-const handleSalvarVideoaula = async (e) => {
+  const handleSalvarVideoaula = async (e) => {
     e.preventDefault();
     if (!tituloV || !turmaIdV) return alert('Preencha os campos obrigatórios.');
 
     setSalvando(true);
     try {
       const urlFormatada = formatarUrlVideo(videoUrlV);
+      const modObj = modulosDisponiveis.find(m => m.id === moduloIdV);
 
       const dadosAula = {
         titulo: tituloV,
-        modulo_nome: moduloV || 'Módulo Geral',
+        modulo_id: moduloIdV || null,
+        modulo_nome: modObj ? modObj.titulo : 'Módulo Geral',
         turma_id: turmaIdV,
         duracao_min: duracaoV ? Number(duracaoV) : null,
         video_url: urlFormatada,
-        ordem: videoaulas.length + 1 // 👈 Adicionado aqui para satisfazer a restrição do banco!
+        ordem: videoaulas.length + 1
       };
 
       const { error } = await supabase.from('aulas').insert(dadosAula);
@@ -96,7 +133,7 @@ const handleSalvarVideoaula = async (e) => {
       alert('Videoaula cadastrada com sucesso!');
       setModalVideoaulaAberto(false);
       setTituloV('');
-      setModuloV('');
+      setModuloIdV('');
       setTurmaIdV('');
       setDuracaoV('');
       setVideoUrlV('');
@@ -109,16 +146,25 @@ const handleSalvarVideoaula = async (e) => {
     }
   };
   
-  // Abrir Edição de Videoaula
-  const abrirEdicaoVideo = (v) => {
+  // Abrir Edição de Videoaula (Carrega os módulos de forma síncrona antes de abrir o modal)
+  const abrirEdicaoVideo = async (v) => {
     setVideoEmEdicao(v);
     setTituloV(v.titulo || '');
-    setModuloV(v.modulo_nome || v.modulo || '');
-    setTurmaIdV(v.turma_id || '');
     setDuracaoV(v.duracao_min || '');
     setVideoUrlV(v.video_url || '');
-    setModalEditVideoAberto(true);
     setMenuAberto(null);
+
+    if (v.turma_id) {
+      setTurmaIdV(v.turma_id);
+      // Carrega os módulos aguardando a resposta antes de setar o ID do módulo
+      await carregarModulosPorTurmaId(v.turma_id);
+    } else {
+      setTurmaIdV('');
+      setModulosDisponiveis([]);
+    }
+
+    setModuloIdV(v.modulo_id || '');
+    setModalEditVideoAberto(true);
   };
 
   // Atualizar Videoaula
@@ -129,10 +175,12 @@ const handleSalvarVideoaula = async (e) => {
     setSalvando(true);
     try {
       const urlFormatada = formatarUrlVideo(videoUrlV);
+      const modObj = modulosDisponiveis.find(m => m.id === moduloIdV);
 
       const { error } = await supabase.from('aulas').update({
         titulo: tituloV,
-        modulo_nome: moduloV,
+        modulo_id: moduloIdV || null,
+        modulo_nome: modObj ? modObj.titulo : (videoEmEdicao.modulo_nome || 'Módulo Geral'),
         turma_id: turmaIdV,
         duracao_min: duracaoV ? Number(duracaoV) : null,
         video_url: urlFormatada,
@@ -246,8 +294,16 @@ const handleSalvarVideoaula = async (e) => {
             </p>
           </div>
 
-          <div className="w-9 h-9 bg-brand-orange rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0">
-            A
+          <div className="flex items-center gap-3">
+            <Link
+              to="/admin/modulos"
+              className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors"
+            >
+              <Layers className="w-4 h-4 text-brand-orange" /> Gerenciar Módulos
+            </Link>
+            <div className="w-9 h-9 bg-brand-orange rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0">
+              A
+            </div>
           </div>
         </header>
 
@@ -305,7 +361,8 @@ const handleSalvarVideoaula = async (e) => {
               <button
                 onClick={() => {
                   if (aba === 'videoaulas') {
-                    setTituloV(''); setModuloV(''); setTurmaIdV(''); setDuracaoV(''); setVideoUrlV('');
+                    setTituloV(''); setModuloIdV(''); setTurmaIdV(''); setDuracaoV(''); setVideoUrlV('');
+                    setModulosDisponiveis([]);
                     setModalVideoaulaAberto(true);
                   } else {
                     setTituloL(''); setProfessorL('Prof. Ari'); setTurmaIdL(''); setDataHoraL(''); setLinkL('');
@@ -341,7 +398,7 @@ const handleSalvarVideoaula = async (e) => {
                           <tr key={v.id} className="hover:bg-slate-50/60 transition-colors">
                             <td className="px-6 py-3.5">
                               <p className="font-bold text-slate-900 text-sm">{v.titulo}</p>
-                              <p className="text-xs text-slate-500">{v.modulo_nome || v.modulo}</p>
+                              <p className="text-xs text-slate-500">{v.modulo_nome || v.modulo || 'Módulo Geral'}</p>
                             </td>
                             <td className="px-6 py-3.5 whitespace-nowrap">
                               <span className="text-sm font-medium text-slate-600">{v.turmas?.nome || '—'}</span>
@@ -504,24 +561,13 @@ const handleSalvarVideoaula = async (e) => {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Módulo</label>
-                <input
-                  type="text"
-                  value={moduloV}
-                  onChange={(e) => setModuloV(e.target.value)}
-                  placeholder="Ex: Módulo de Álgebra Básica"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
-                />
-              </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Turma Alvo *</label>
                   <select
                     required
                     value={turmaIdV}
-                    onChange={(e) => setTurmaIdV(e.target.value)}
+                    onChange={handleTrocarTurmaForm}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
                   >
                     <option value="">Selecione a turma</option>
@@ -532,15 +578,30 @@ const handleSalvarVideoaula = async (e) => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Duração (minutos)</label>
-                  <input
-                    type="number"
-                    value={duracaoV}
-                    onChange={(e) => setDuracaoV(e.target.value)}
-                    placeholder="Ex: 45"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
-                  />
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Módulo</label>
+                  <select
+                    value={moduloIdV}
+                    onChange={(e) => setModuloIdV(e.target.value)}
+                    disabled={!turmaIdV || modulosDisponiveis.length === 0}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange disabled:opacity-50"
+                  >
+                    <option value="">Selecione o módulo</option>
+                    {modulosDisponiveis.map((m) => (
+                      <option key={m.id} value={m.id}>{m.titulo}</option>
+                    ))}
+                  </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Duração (minutos)</label>
+                <input
+                  type="number"
+                  value={duracaoV}
+                  onChange={(e) => setDuracaoV(e.target.value)}
+                  placeholder="Ex: 45"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                />
               </div>
 
               <div>
@@ -598,23 +659,13 @@ const handleSalvarVideoaula = async (e) => {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Módulo</label>
-                <input
-                  type="text"
-                  value={moduloV}
-                  onChange={(e) => setModuloV(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
-                />
-              </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Turma Alvo *</label>
                   <select
                     required
                     value={turmaIdV}
-                    onChange={(e) => setTurmaIdV(e.target.value)}
+                    onChange={handleTrocarTurmaForm}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
                   >
                     <option value="">Selecione a turma</option>
@@ -625,14 +676,29 @@ const handleSalvarVideoaula = async (e) => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Duração (minutos)</label>
-                  <input
-                    type="number"
-                    value={duracaoV}
-                    onChange={(e) => setDuracaoV(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
-                  />
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Módulo</label>
+                  <select
+                    value={moduloIdV}
+                    onChange={(e) => setModuloIdV(e.target.value)}
+                    disabled={!turmaIdV || modulosDisponiveis.length === 0}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange disabled:opacity-50"
+                  >
+                    <option value="">Selecione o módulo</option>
+                    {modulosDisponiveis.map((m) => (
+                      <option key={m.id} value={m.id}>{m.titulo}</option>
+                    ))}
+                  </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Duração (minutos)</label>
+                <input
+                  type="number"
+                  value={duracaoV}
+                  onChange={(e) => setDuracaoV(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                />
               </div>
 
               <div>

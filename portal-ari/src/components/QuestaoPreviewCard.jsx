@@ -44,7 +44,7 @@ export default function QuestaoPreviewCard({
       </div>
 
       <div className="p-5">
-        <p className="text-slate-800 font-medium leading-relaxed mb-5 whitespace-pre-wrap">
+        <p className="text-slate-800 font-medium leading-relaxed mb-5 whitespace-pre-wrap text-justify">
           {temBlocos ? (
             <RenderBlocos blocos={blocosEnunciado} placeholder="O enunciado aparece aqui conforme você digita..." />
           ) : (

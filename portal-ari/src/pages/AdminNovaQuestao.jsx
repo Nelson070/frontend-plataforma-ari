@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
-import { Save, PlusCircle, ArrowLeft, Loader2, CheckCircle2, ImagePlus, X, Eye } from 'lucide-react';
+import { Save, PlusCircle, ArrowLeft, Loader2, CheckCircle2, ImagePlus, X, Eye, Video } from 'lucide-react';
 import BlocoEditor from '../components/BlocoEditor';
 import RenderBlocos from '../components/RenderBlocos';
 import { criarBloco, processarBlocos, blocosParaTexto } from '../lib/blocos';
@@ -18,6 +18,7 @@ export default function AdminNovaQuestao() {
   const [assunto, setAssunto] = useState('');
   const [dificuldade, setDificuldade] = useState('medio');
   const [comentario, setComentario] = useState('');
+  const [videoResolucaoUrl, setVideoResolucaoUrl] = useState(''); // 👈 Novo estado para o link da resolução
   const [respostaCorreta, setRespostaCorreta] = useState('A');
   const [ano, setAno] = useState(new Date().getFullYear());
   const [banca, setBanca] = useState('Inédita');
@@ -25,7 +26,7 @@ export default function AdminNovaQuestao() {
   // Enunciado em blocos (texto/imagem intercalados)
   const [blocosEnunciado, setBlocosEnunciado] = useState([criarBloco('texto')]);
 
-  // Gráfico/imagem principal, em destaque abaixo do enunciado (não é "inline")
+  // Gráfico/imagem principal, em destaque abaixo do enunciado
   const [imagemPrincipalFile, setImagemPrincipalFile] = useState(null);
   const [imagemPrincipalPreview, setImagemPrincipalPreview] = useState(null);
 
@@ -57,11 +58,23 @@ export default function AdminNovaQuestao() {
     setImagemPrincipalPreview(null);
   };
 
+  // Função auxiliar para converter link do YouTube em formato Embed
+  const formatarUrlVideo = (url) => {
+    if (!url) return '';
+    if (url.includes('embed')) return url;
+    const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+    if (match && match[1]) {
+      return `https://www.youtube.com/embed/${match[1]}`;
+    }
+    return url;
+  };
+
   const resetarFormulario = () => {
     setBlocosEnunciado([criarBloco('texto')]);
     setAlternativasBlocos(Object.fromEntries(LETRAS.map((letra) => [letra, [criarBloco('texto')]])));
     removerImagemPrincipal();
     setComentario('');
+    setVideoResolucaoUrl('');
   };
 
   const handleSubmit = async (e) => {
@@ -90,11 +103,13 @@ export default function AdminNovaQuestao() {
           const blocosProntos = await processarBlocos(supabase, alternativasBlocos[letra], turmaId, `alt-${letra}`);
           return {
             letra,
-            texto: blocosParaTexto(blocosProntos), // fallback em texto puro, pra compatibilidade
+            texto: blocosParaTexto(blocosProntos),
             blocos: blocosProntos,
           };
         })
       );
+
+      const urlVideoFormatada = formatarUrlVideo(videoResolucaoUrl);
 
       const { error } = await supabase.from('questoes').insert([{
         turma_id: turmaId,
@@ -107,6 +122,7 @@ export default function AdminNovaQuestao() {
         alternativas: alternativasFormatadas,
         resposta_correta: respostaCorreta,
         comentario,
+        video_resolucao_url: urlVideoFormatada, // 👈 Salva o link formatado da resolução no banco
         ano: parseInt(ano),
         banca,
       }]);
@@ -126,6 +142,7 @@ export default function AdminNovaQuestao() {
   };
 
   const turmaAtual = turmas.find((t) => t.id === turmaId);
+  const previewVideoUrlFormatado = formatarUrlVideo(videoResolucaoUrl);
 
   return (
     <div className="min-h-screen bg-slate-50 p-6 md:p-8 font-sans">
@@ -256,10 +273,33 @@ export default function AdminNovaQuestao() {
               </div>
             </div>
 
-            {/* Comentário */}
-            <div>
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">Resolução (Opcional)</h3>
-              <textarea value={comentario} onChange={(e) => setComentario(e.target.value)} rows="3" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium resize-y" placeholder="Explique o passo a passo da resposta correta..."></textarea>
+            {/* Comentário e Vídeo de Resolução */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">Resolução da Questão</h3>
+              
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1.5">
+                  <Video className="w-4 h-4 text-brand-orange" /> Link do Vídeo de Resolução (YouTube / Embed - Opcional)
+                </label>
+                <input 
+                  type="text" 
+                  value={videoResolucaoUrl} 
+                  onChange={(e) => setVideoResolucaoUrl(e.target.value)} 
+                  placeholder="Ex: https://www.youtube.com/watch?v=..." 
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium text-sm" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Texto Explicativo da Resolução</label>
+                <textarea 
+                  value={comentario} 
+                  onChange={(e) => setComentario(e.target.value)} 
+                  rows="4" 
+                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium resize-y text-sm" 
+                  placeholder="Explique o passo a passo da resposta correta..."
+                ></textarea>
+              </div>
             </div>
 
             <div className="pt-4 flex justify-end">
@@ -286,7 +326,7 @@ export default function AdminNovaQuestao() {
               </div>
 
               <div className="p-5">
-                <p className="text-slate-800 font-medium leading-relaxed mb-4">
+                <p className="text-slate-800 font-medium leading-relaxed mb-4 text-justify">
                   <RenderBlocos blocos={blocosEnunciado} placeholder="O enunciado aparece aqui conforme você digita..." />
                 </p>
 
@@ -315,13 +355,30 @@ export default function AdminNovaQuestao() {
                 </div>
               </div>
 
-              {comentario && (
-                <div className="px-5 py-4 bg-orange-50/60 border-t border-orange-100">
-                  <div className="flex items-center gap-2 mb-2">
+              {/* Bloco de Resolução com Vídeo (Se houver) + Texto */}
+              {(comentario || previewVideoUrlFormatado) && (
+                <div className="px-5 py-4 bg-orange-50/60 border-t border-orange-100 space-y-4">
+                  <div className="flex items-center gap-2">
                     <div className="w-6 h-6 bg-brand-orange rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0">P</div>
                     <h4 className="font-black text-slate-800 text-sm">Resolução do Professor</h4>
                   </div>
-                  <p className="text-sm text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">{comentario}</p>
+
+                  {previewVideoUrlFormatado && (
+                    <div className="aspect-video bg-black rounded-xl overflow-hidden border border-orange-200 shadow-md">
+                      <iframe 
+                        className="w-full h-full"
+                        src={previewVideoUrlFormatado} 
+                        title="Vídeo de Resolução"
+                        frameBorder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      ></iframe>
+                    </div>
+                  )}
+
+                  {comentario && (
+                    <p className="text-sm text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">{comentario}</p>
+                  )}
                 </div>
               )}
             </div>

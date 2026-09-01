@@ -267,7 +267,7 @@ export default function Simulados() {
                     </div>
 
                     <div className="select-none" onCopy={(e) => e.preventDefault()} onContextMenu={(e) => e.preventDefault()}>
-                      <p className="text-lg text-slate-800 leading-relaxed font-medium mb-6">
+                      <p className="text-lg text-slate-800 leading-relaxed font-medium mb-6 text-justify">
                         {questao.blocos_enunciado?.length > 0 ? (
                           <RenderBlocos blocos={questao.blocos_enunciado} imgHeight="h-20" />
                         ) : (

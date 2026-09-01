@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { to: '/admin/alunos', label: 'Gestão de Alunos', icon: Users },
   { to: '/admin/simulados-questoes', label: 'Simulados e Questões', icon: FileQuestion },
   { to: '/admin/assuntos', label: 'Gerenciar Assuntos', icon: FolderTree },
+  { to: '/admin/modulos', label: 'Módulos e Aulas', icon: Video },
   { to: '/admin/aulas-lives', label: 'Aulas e Lives', icon: Video },
   { to: '/admin/cronograma', label: 'Plano de Estudos', icon: Calendar },
 ];

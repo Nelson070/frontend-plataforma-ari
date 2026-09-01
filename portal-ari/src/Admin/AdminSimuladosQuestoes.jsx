@@ -313,7 +313,7 @@ export default function AdminSimuladosQuestoes() {
           onClick={() => setQuestaoVisualizando(null)}
         >
           <div
-            className="max-w-xl w-full max-h-[85vh] overflow-y-auto"
+            className="max-w-3xl w-full max-h-[85vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3 px-1">
@@ -351,7 +351,7 @@ export default function AdminSimuladosQuestoes() {
           onClick={fecharVisualizacaoSimulado}
         >
           <div
-            className="max-w-2xl w-full"
+            className="max-w-3xl w-full"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="bg-white rounded-2xl border border-slate-200 p-5 mb-4 sticky top-0 z-10 shadow-sm">
