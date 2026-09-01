@@ -193,35 +193,33 @@ export default function AdminAlunos() {
     setMenuAbertoId(null);
   };
 
-  // 6. Enviar e-mail de redefinição de senha para o aluno (Correção do erro 403)
+  // 6. Alterar a senha diretamente via função do banco (RPC)
   const handleSalvarSenha = async (e) => {
     e.preventDefault();
-    if (!alunoSenhaAlvo) return;
+    if (!alunoSenhaAlvo || !novaSenha.trim()) {
+      return alert('Digite a nova senha.');
+    }
+
+    if (novaSenha.length < 6) {
+      return alert('A senha precisa ter pelo menos 6 caracteres.');
+    }
 
     setSubmittingSenha(true);
     try {
-      const targetEmail = alunoSenhaAlvo.email !== 'Aluno(a)' 
-        ? alunoSenhaAlvo.email 
-        : prompt('Digite o e-mail cadastrado deste aluno para enviar o link de redefinição:');
-
-      if (!targetEmail) {
-        setSubmittingSenha(false);
-        return;
-      }
-
-      const { error } = await supabase.auth.resetPasswordForEmail(targetEmail, {
-        redirectTo: `${window.location.origin}/login`,
+      const { error } = await supabase.rpc('admin_mudar_senha_usuario', {
+        user_id: alunoSenhaAlvo.id,
+        nova_senha: novaSenha.trim()
       });
 
       if (error) throw error;
 
-      alert(`Link de redefinição de senha enviado com sucesso para ${targetEmail}!`);
+      alert(`Senha de ${alunoSenhaAlvo.nome} alterada com sucesso!`);
       setModalSenhaOpen(false);
       setAlunoSenhaAlvo(null);
       setNovaSenha('');
     } catch (err) {
-      console.error('Erro ao enviar e-mail de recuperação:', err);
-      alert('Erro ao enviar o e-mail de recuperação. Verifique se o e-mail do aluno está correto.');
+      console.error('Erro ao alterar senha:', err);
+      alert('Erro ao alterar senha: ' + (err.message || 'Erro desconhecido'));
     } finally {
       setSubmittingSenha(false);
     }
@@ -505,16 +503,24 @@ export default function AdminAlunos() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 relative">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <h3 className="text-base font-black text-slate-900">Redefinir Senha do Aluno</h3>
+              <h3 className="text-base font-black text-slate-900">Redefinir Senha de {alunoSenhaAlvo?.nome}</h3>
               <button onClick={() => setModalSenhaOpen(false)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleSalvarSenha} className="mt-5 space-y-4">
-              <p className="text-xs text-slate-500">
-                Isso enviará um e-mail de recuperação de senha com instruções para <strong>{alunoSenhaAlvo?.nome}</strong>.
-              </p>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Nova Senha</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Digite a nova senha (mín. 6 caracteres)"
+                  value={novaSenha}
+                  onChange={(e) => setNovaSenha(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange"
+                />
+              </div>
 
               <div className="pt-2 flex gap-3">
                 <button
@@ -529,7 +535,7 @@ export default function AdminAlunos() {
                   disabled={submittingSenha}
                   className="flex-1 py-2.5 px-4 bg-brand-orange hover:bg-orange-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm"
                 >
-                  {submittingSenha ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Enviar E-mail de Recuperação'}
+                  {submittingSenha ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Salvar Nova Senha'}
                 </button>
               </div>
             </form>
