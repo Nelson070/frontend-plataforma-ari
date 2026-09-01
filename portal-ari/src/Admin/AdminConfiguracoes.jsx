@@ -21,6 +21,7 @@ function Toggle({ ativo, onChange }) {
 export default function AdminConfiguracoes() {
   const [loading, setLoading] = useState(true);
   const [turmas, setTurmas] = useState([]);
+  const [adminUserId, setAdminUserId] = useState(null);
   
   // Estado dos modais de Turma
   const [modalTurmaOpen, setModalTurmaOpen] = useState(false);
@@ -29,8 +30,8 @@ export default function AdminConfiguracoes() {
   const [salvandoTurma, setSalvandoTurma] = useState(false);
 
   // Perfil Admin
-  const [nomeAdmin, setNomeAdmin] = useState('Prof. Ari');
-  const [emailAdmin, setEmailAdmin] = useState('ari@aritmaticagabaritando.com');
+  const [nomeAdmin, setNomeAdmin] = useState('');
+  const [emailAdmin, setEmailAdmin] = useState('');
   const [salvandoPerfil, setSalvandoPerfil] = useState(false);
 
   // Segurança (Senha)
@@ -38,38 +39,91 @@ export default function AdminConfiguracoes() {
   const [senhaConfirma, setSenhaConfirma] = useState('');
   const [salvandoSenha, setSalvandoSenha] = useState(false);
 
-  // Notificações locais
+  // Notificações reais
   const [notificacoes, setNotificacoes] = useState({
     novaMatricula: true,
     novaDuvida: true,
     resumoSemanal: false,
   });
 
-  const toggleNotificacao = (chave) => {
-    setNotificacoes((prev) => ({ ...prev, [chave]: !prev[chave] }));
+  const toggleNotificacao = async (chave) => {
+    const novasNotificacoes = { ...notificacoes, [chave]: !notificacoes[chave] };
+    setNotificacoes(novasNotificacoes);
+
+    if (adminUserId) {
+      try {
+        await supabase
+          .from('profiles')
+          .update({ notificacoes: novasNotificacoes })
+          .eq('id', adminUserId);
+      } catch (err) {
+        console.error('Erro ao salvar preferências de notificação:', err);
+      }
+    }
   };
 
-  // Carregar turmas reais do banco
-  const carregarTurmas = async () => {
+  // Carregar dados iniciais (Perfil, Notificações e Turmas)
+  const carregarDadosAdmin = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setAdminUserId(user.id);
+        setEmailAdmin(user.email || '');
+
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('nome, notificacoes')
+          .eq('id', user.id)
+          .single();
+
+        if (profileData) {
+          if (profileData.nome) setNomeAdmin(profileData.nome);
+          if (profileData.notificacoes) setNotificacoes(profileData.notificacoes);
+        }
+      }
+
+      const { data: turmasData, error: turmasError } = await supabase
         .from('turmas')
         .select('*')
         .order('nome');
 
-      if (error) throw error;
-      setTurmas(data || []);
+      if (turmasError) throw turmasError;
+      setTurmas(turmasData || []);
+
     } catch (err) {
-      console.error('Erro ao carregar turmas:', err);
+      console.error('Erro ao carregar dados do admin:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    carregarTurmas();
+    carregarDadosAdmin();
   }, []);
+
+  // Salvar Alterações do Perfil Real
+  const handleSalvarPerfil = async (e) => {
+    e.preventDefault();
+    if (!adminUserId) return;
+
+    setSalvandoPerfil(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ nome: nomeAdmin })
+        .eq('id', adminUserId);
+
+      if (error) throw error;
+      alert('Perfil atualizado com sucesso no banco de dados!');
+    } catch (err) {
+      console.error('Erro ao atualizar perfil:', err);
+      alert('Erro ao atualizar perfil.');
+    } finally {
+      setSalvandoPerfil(false);
+    }
+  };
 
   // Salvar / Criar Turma
   const handleSalvarTurma = async (e) => {
@@ -79,7 +133,6 @@ export default function AdminConfiguracoes() {
     setSalvandoTurma(true);
     try {
       if (turmaEmEdicao) {
-        // Editar
         const { error } = await supabase
           .from('turmas')
           .update({ nome: nomeNovaTurma })
@@ -88,7 +141,6 @@ export default function AdminConfiguracoes() {
         if (error) throw error;
         alert('Turma atualizada com sucesso!');
       } else {
-        // Criar Nova
         const { error } = await supabase
           .from('turmas')
           .insert({ nome: nomeNovaTurma });
@@ -100,7 +152,7 @@ export default function AdminConfiguracoes() {
       setModalTurmaOpen(false);
       setNomeNovaTurma('');
       setTurmaEmEdicao(null);
-      carregarTurmas();
+      carregarDadosAdmin();
     } catch (err) {
       console.error('Erro ao salvar turma:', err);
       alert('Erro ao salvar turma.');
@@ -117,7 +169,7 @@ export default function AdminConfiguracoes() {
       const { error } = await supabase.from('turmas').delete().eq('id', id);
       if (error) throw error;
       alert('Turma excluída com sucesso!');
-      carregarTurmas();
+      carregarDadosAdmin();
     } catch (err) {
       console.error('Erro ao excluir turma:', err);
       alert('Erro ao excluir turma. Verifique se há alunos vinculados.');
@@ -136,23 +188,27 @@ export default function AdminConfiguracoes() {
     setModalTurmaOpen(true);
   };
 
-  // Atualizar Senha
+  // Atualizar Senha Real via Supabase Auth
   const handleAtualizarSenha = async (e) => {
     e.preventDefault();
     if (!senhaNova || senhaNova !== senhaConfirma) {
       return alert('As senhas não coincidem ou estão vazias.');
     }
 
+    if (senhaNova.length < 6) {
+      return alert('A senha precisa ter pelo menos 6 caracteres.');
+    }
+
     setSalvandoSenha(true);
     try {
       const { error } = await supabase.auth.updateUser({ password: senhaNova });
       if (error) throw error;
-      alert('Senha atualizada com sucesso!');
+      alert('Senha atualizada com sucesso no sistema de autenticação!');
       setSenhaNova('');
       setSenhaConfirma('');
     } catch (err) {
       console.error('Erro ao atualizar senha:', err);
-      alert('Erro ao atualizar senha.');
+      alert('Erro ao atualizar senha: ' + err.message);
     } finally {
       setSalvandoSenha(false);
     }
@@ -167,11 +223,11 @@ export default function AdminConfiguracoes() {
         <header className="h-16 bg-white border-b border-slate-200 px-6 md:px-8 flex justify-between items-center shrink-0">
           <div>
             <h2 className="text-lg font-black text-slate-900 leading-tight">Configurações</h2>
-            <p className="text-xs font-medium text-slate-500">Preferências da conta e da plataforma</p>
+            <p className="text-xs font-medium text-slate-500">Preferências reais da conta e da plataforma</p>
           </div>
 
           <div className="w-9 h-9 bg-brand-orange rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0">
-            A
+            {nomeAdmin ? nomeAdmin[0].toUpperCase() : 'A'}
           </div>
         </header>
 
@@ -187,37 +243,41 @@ export default function AdminConfiguracoes() {
 
               <div className="flex items-center gap-4 mb-6">
                 <div className="w-14 h-14 bg-brand-orange rounded-full flex items-center justify-center text-white font-black text-xl shrink-0">
-                  A
+                  {nomeAdmin ? nomeAdmin[0].toUpperCase() : 'A'}
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Nome</label>
-                  <input
-                    type="text"
-                    value={nomeAdmin}
-                    onChange={(e) => setNomeAdmin(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange"
-                  />
+              <form onSubmit={handleSalvarPerfil}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Nome</label>
+                    <input
+                      type="text"
+                      required
+                      value={nomeAdmin}
+                      onChange={(e) => setNomeAdmin(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Email (Conta)</label>
+                    <input
+                      type="email"
+                      disabled
+                      value={emailAdmin}
+                      className="w-full bg-slate-100 border border-slate-200 text-slate-500 rounded-xl px-4 py-2.5 text-sm font-medium cursor-not-allowed"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Email</label>
-                  <input
-                    type="email"
-                    value={emailAdmin}
-                    onChange={(e) => setEmailAdmin(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange"
-                  />
-                </div>
-              </div>
 
-              <button 
-                onClick={() => alert('Dados atualizados com sucesso!')}
-                className="mt-5 px-5 py-2.5 bg-brand-orange hover:bg-orange-600 text-white font-bold text-sm rounded-xl transition-colors shadow-sm"
-              >
-                Salvar alterações
-              </button>
+                <button 
+                  type="submit"
+                  disabled={salvandoPerfil}
+                  className="mt-5 px-5 py-2.5 bg-brand-orange hover:bg-orange-600 text-white font-bold text-sm rounded-xl transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
+                >
+                  {salvandoPerfil && <Loader2 className="w-4 h-4 animate-spin" />} Salvar alterações
+                </button>
+              </form>
             </div>
 
             {/* Turmas da Plataforma (Dinâmico do Banco) */}
@@ -228,7 +288,7 @@ export default function AdminConfiguracoes() {
                 </h3>
                 <button 
                   onClick={abrirModalCriar}
-                  className="flex items-center gap-1.5 text-sm font-bold text-brand-orange hover:text-orange-600 transition-colors"
+                  className="flex items-center gap-1.5 text-sm font-bold text-brand-orange hover:text-orange-600 transition-colors cursor-pointer"
                 >
                   <Plus className="w-4 h-4" /> Nova Turma
                 </button>
@@ -246,13 +306,13 @@ export default function AdminConfiguracoes() {
                     <div key={turma.id} className="flex items-center justify-between py-3">
                       <div>
                         <p className="font-bold text-slate-900 text-sm">{turma.nome}</p>
-                        <p className="text-xs text-slate-500">ID: {turma.id}</p>
+                        <p className="text-xs text-slate-500 font-mono">ID: {turma.id}</p>
                       </div>
                       <div className="flex items-center gap-1">
-                        <button onClick={() => abrirModalEditar(turma)} className="p-2 text-slate-400 hover:text-brand-orange transition-colors">
+                        <button onClick={() => abrirModalEditar(turma)} className="p-2 text-slate-400 hover:text-brand-orange transition-colors cursor-pointer">
                           <Pencil className="w-4 h-4" />
                         </button>
-                        <button onClick={() => handleExcluirTurma(turma.id, turma.nome)} className="p-2 text-slate-400 hover:text-red-500 transition-colors">
+                        <button onClick={() => handleExcluirTurma(turma.id, turma.nome)} className="p-2 text-slate-400 hover:text-red-500 transition-colors cursor-pointer">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -265,7 +325,7 @@ export default function AdminConfiguracoes() {
             {/* Notificações */}
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
               <h3 className="text-sm font-black text-slate-900 flex items-center gap-2 mb-5">
-                <Bell className="w-4.5 h-4.5 text-brand-orange" /> Notificações
+                <Bell className="w-4.5 h-4.5 text-brand-orange" /> Notificações (Salvas no Banco)
               </h3>
 
               <div className="space-y-4">
@@ -296,7 +356,7 @@ export default function AdminConfiguracoes() {
             {/* Segurança */}
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
               <h3 className="text-sm font-black text-slate-900 flex items-center gap-2 mb-5">
-                <Lock className="w-4.5 h-4.5 text-brand-orange" /> Segurança
+                <Lock className="w-4.5 h-4.5 text-brand-orange" /> Segurança (Alterar Senha do Admin)
               </h3>
 
               <form onSubmit={handleAtualizarSenha} className="space-y-4">
@@ -328,7 +388,7 @@ export default function AdminConfiguracoes() {
                 <button
                   type="submit"
                   disabled={salvandoSenha}
-                  className="px-5 py-2.5 bg-brand-orange hover:bg-orange-600 text-white font-bold text-sm rounded-xl transition-colors shadow-sm flex items-center gap-2"
+                  className="px-5 py-2.5 bg-brand-orange hover:bg-orange-600 text-white font-bold text-sm rounded-xl transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
                 >
                   {salvandoSenha && <Loader2 className="w-4 h-4 animate-spin" />} Atualizar senha
                 </button>
@@ -347,7 +407,7 @@ export default function AdminConfiguracoes() {
               <h3 className="text-base font-black text-slate-900">
                 {turmaEmEdicao ? 'Editar Turma' : 'Nova Turma'}
               </h3>
-              <button onClick={() => setModalTurmaOpen(false)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg">
+              <button onClick={() => setModalTurmaOpen(false)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -369,14 +429,14 @@ export default function AdminConfiguracoes() {
                 <button
                   type="button"
                   onClick={() => setModalTurmaOpen(false)}
-                  className="flex-1 py-2.5 px-4 border border-slate-200 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50"
+                  className="flex-1 py-2.5 px-4 border border-slate-200 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50 cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={salvandoTurma}
-                  className="flex-1 py-2.5 px-4 bg-brand-orange hover:bg-orange-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm"
+                  className="flex-1 py-2.5 px-4 bg-brand-orange hover:bg-orange-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm cursor-pointer"
                 >
                   {salvandoTurma && <Loader2 className="w-4 h-4 animate-spin" />} Salvar
                 </button>

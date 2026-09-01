@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { Calendar, ArrowLeft, BookOpen, Target, RefreshCw, Loader2, PlayCircle } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Calendar, BookOpen, Target, RefreshCw, Loader2, PlayCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 
 const DIAS_SEMANA = [
@@ -40,13 +40,19 @@ export default function PlanoEstudos() {
         
         setPerfil(userProfile);
 
-        if (userProfile?.turma_id) {
-          const { data } = await supabase
-            .from('cronograma')
-            .select('*')
-            .eq('turma_id', userProfile.turma_id)
-            .order('dia_semana', { ascending: true });
-          
+        if (userProfile) {
+          // Busca tanto as tarefas da turma quanto as tarefas exclusivas do aluno em uma única chamada
+          let query = supabase.from('cronograma').select('*');
+
+          if (userProfile.turma_id) {
+            query = query.or(`turma_id.eq.${userProfile.turma_id},usuario_id.eq.${userProfile.id}`);
+          } else {
+            query = query.eq('usuario_id', userProfile.id);
+          }
+
+          const { data, error } = await query.order('dia_semana', { ascending: true });
+          if (error) throw error;
+
           setCronograma(data || []);
         }
       } catch (error) {
@@ -141,7 +147,17 @@ export default function PlanoEstudos() {
                               <div className={`mt-0.5 p-2 rounded-xl shrink-0 ${config.bg} ${config.cor}`}>
                                 <Icone className="w-4 h-4" />
                               </div>
-                              <div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  {tarefa.materia && (
+                                    <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-bold uppercase">
+                                      {tarefa.materia}
+                                    </span>
+                                  )}
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase">
+                                    {tarefa.tipo}
+                                  </span>
+                                </div>
                                 <h4 className="font-bold text-slate-800 text-sm">{tarefa.titulo}</h4>
                                 {tarefa.descricao && (
                                   <p className="text-xs text-slate-500 font-medium mt-1 leading-relaxed">
