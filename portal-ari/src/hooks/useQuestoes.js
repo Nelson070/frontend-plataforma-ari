@@ -27,12 +27,31 @@ export function useQuestoes({ materia, assunto, assuntoId, dificuldade, busca, p
     setLoading(true);
     setError(null);
 
-    // Traz a questão e os dados da tabela assuntos_hierarquia vinculada
+    // Descobre a turma do aluno logado para isolar o nicho corretamente
+    const { data: { user } } = await supabase.auth.getUser();
+    let turmaIdAluno = null;
+
+    if (user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('turma_id')
+        .eq('id', user.id)
+        .single();
+      
+      if (profile) turmaIdAluno = profile.turma_id;
+    }
+
+    // Traz a questão filtrando estritamente pela turma do aluno
     let query = supabase
       .from('questoes')
       .select('*, assuntos_hierarquia(*)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(pagina * porPagina, pagina * porPagina + porPagina - 1);
+
+    // Aplica o isolamento por nicho/turma se o aluno estiver logado e vinculado a uma turma
+    if (turmaIdAluno) {
+      query = query.eq('turma_id', turmaIdAluno);
+    }
 
     if (materia) query = query.eq('materia', materia);
     if (assuntoId) query = query.eq('assunto_id', assuntoId);
@@ -97,7 +116,26 @@ export function useAssuntosDisponiveis() {
 }
 
 export async function buscarQuestoesParaSimulado({ assuntoId, dificuldade, quantidade }) {
+  // Descobre a turma do aluno logado para isolar também na geração de simulados
+  const { data: { user } } = await supabase.auth.getUser();
+  let turmaIdAluno = null;
+
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('turma_id')
+      .eq('id', user.id)
+      .single();
+    
+    if (profile) turmaIdAluno = profile.turma_id;
+  }
+
   let query = supabase.from('questoes').select('id, dificuldade');
+
+  if (turmaIdAluno) {
+    query = query.eq('turma_id', turmaIdAluno);
+  }
+
   if (assuntoId) query = query.eq('assunto_id', assuntoId);
   if (dificuldade && dificuldade !== 'misto') query = query.eq('dificuldade', dificuldade);
 

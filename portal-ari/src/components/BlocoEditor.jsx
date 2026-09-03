@@ -2,9 +2,6 @@ import React from 'react';
 import { ImagePlus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { criarBloco } from '../lib/blocos';
 
-// Editor reutilizável de blocos texto/imagem intercalados.
-// Usado tanto pro enunciado quanto pra cada alternativa — antes esse
-// JSX estava copiado 6 vezes (enunciado + 5 alternativas); agora é 1 componente.
 export default function BlocoEditor({ blocos, onChange, compact = false }) {
   const adicionar = (tipo) => onChange([...blocos, criarBloco(tipo)]);
 
@@ -39,7 +36,6 @@ export default function BlocoEditor({ blocos, onChange, compact = false }) {
           {bloco.tipo === 'texto' ? (
             <input
               type="text"
-              required
               value={bloco.valor}
               onChange={(e) => atualizar(bloco.id, { valor: e.target.value })}
               placeholder="Trecho de texto..."
@@ -69,7 +65,7 @@ export default function BlocoEditor({ blocos, onChange, compact = false }) {
                       if (bloco.file) URL.revokeObjectURL(bloco.valor);
                       atualizar(bloco.id, { valor: '', file: null });
                     }}
-                    className="text-red-500 hover:text-red-700 text-xs font-bold"
+                    className="text-red-500 hover:text-red-700 text-xs font-bold cursor-pointer"
                   >
                     Remover
                   </button>
@@ -79,13 +75,13 @@ export default function BlocoEditor({ blocos, onChange, compact = false }) {
           )}
 
           <div className="flex items-center gap-0.5 shrink-0">
-            <button type="button" onClick={() => mover(index, -1)} disabled={index === 0} className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30">
+            <button type="button" onClick={() => mover(index, -1)} disabled={index === 0} className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30 cursor-pointer">
               <ArrowUp className="w-3.5 h-3.5" />
             </button>
-            <button type="button" onClick={() => mover(index, 1)} disabled={index === blocos.length - 1} className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30">
+            <button type="button" onClick={() => mover(index, 1)} disabled={index === blocos.length - 1} className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30 cursor-pointer">
               <ArrowDown className="w-3.5 h-3.5" />
             </button>
-            <button type="button" onClick={() => remover(bloco.id)} className="p-1 text-red-400 hover:text-red-600">
+            <button type="button" onClick={() => remover(bloco.id)} className="p-1 text-red-400 hover:text-red-600 cursor-pointer">
               <Trash2 className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -93,10 +89,10 @@ export default function BlocoEditor({ blocos, onChange, compact = false }) {
       ))}
 
       <div className="flex gap-2 pt-1">
-        <button type="button" onClick={() => adicionar('texto')} className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-xs">
+        <button type="button" onClick={() => adicionar('texto')} className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-xs cursor-pointer">
           + Texto
         </button>
-        <button type="button" onClick={() => adicionar('imagem')} className="px-2.5 py-1 bg-orange-50 hover:bg-orange-100 text-brand-orange rounded-lg font-bold text-xs">
+        <button type="button" onClick={() => adicionar('imagem')} className="px-2.5 py-1 bg-orange-50 hover:bg-orange-100 text-brand-orange rounded-lg font-bold text-xs cursor-pointer">
           + Imagem
         </button>
       </div>
