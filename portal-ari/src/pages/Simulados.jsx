@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Target, BookOpen, Settings2, PlayCircle, Clock,
-  ChevronLeft, ChevronRight, CheckCircle2, LayoutGrid, ArrowLeft, Loader2
+  ChevronLeft, ChevronRight, CheckCircle2, LayoutGrid, ArrowLeft, Loader2, Eye, MessageSquare, Check, XCircle, EyeOff
 } from 'lucide-react';
 import Sidebar from './Sidebar';
 import { useAuth } from '../hooks/useAuth';
@@ -27,20 +27,23 @@ export default function Simulados() {
   const { simulados: simuladosOficiais, loading: loadingOficiais } = useSimulados({ tipo: 'oficial' });
   const { assuntos, loading: loadingAssuntos } = useAssuntosDisponiveis();
 
-  const [simuladoAtivo, setSimuladoAtivo] = useState(null); // { id, titulo, tempo_minutos }
+  const [simuladoAtivo, setSimuladoAtivo] = useState(null); 
   const [tentativaId, setTentativaId] = useState(null);
   const [questoesProva, setQuestoesProva] = useState([]);
   const [carregandoProva, setCarregandoProva] = useState(false);
 
   const [questaoAtual, setQuestaoAtual] = useState(0);
-  const [respostas, setRespostas] = useState({}); // { questaoId: letra }
+  const [respostas, setRespostas] = useState({}); 
   const [finalizando, setFinalizando] = useState(false);
-  const [resultado, setResultado] = useState(null); // { acertos, erros, emBranco }
+  const [resultado, setResultado] = useState(null); 
   const [segundosRestantes, setSegundosRestantes] = useState(0);
+  const [visualizandoGabarito, setVisualizandoGabarito] = useState(false); 
+  
+  // 👈 Novo estado: controla se o gabarito/comentário está revelado por demanda nesta questão
+  const [gabaritoReveladoNaQuestao, setGabaritoReveladoNaQuestao] = useState(false);
 
   const handleVoltar = () => navigate('/dashboard');
 
-  // Timer regressivo durante a prova
   useEffect(() => {
     if (!modoResolucao || resultado) return;
     if (segundosRestantes <= 0) return;
@@ -78,6 +81,8 @@ export default function Simulados() {
     setRespostas({});
     setQuestaoAtual(0);
     setResultado(null);
+    setVisualizandoGabarito(false);
+    setGabaritoReveladoNaQuestao(false);
     setSegundosRestantes((simulado.tempo_minutos ?? 60) * 60);
     setModoResolucao(true);
     setCarregandoProva(false);
@@ -147,6 +152,7 @@ export default function Simulados() {
   };
 
   const handleResponder = (letra) => {
+    if (resultado) return; 
     const id = questoesProva[questaoAtual].id;
     setRespostas((prev) => ({ ...prev, [id]: letra }));
   };
@@ -179,13 +185,21 @@ export default function Simulados() {
     setSimuladoAtivo(null);
     setQuestoesProva([]);
     setResultado(null);
+    setVisualizandoGabarito(false);
+    setGabaritoReveladoNaQuestao(false);
+  };
+
+  const mudarQuestao = (novaIndex) => {
+    setQuestaoAtual(novaIndex);
+    setGabaritoReveladoNaQuestao(false); // Reseta a revelação ao trocar de questão
   };
 
   // ==========================================
-  // TELA 2: MODO DE RESOLUÇÃO (A PROVA)
+  // TELA 2: MODO DE RESOLUÇÃO OU GABARITO PÓS-PROVA
   // ==========================================
   if (modoResolucao) {
     const questao = questoesProva[questaoAtual];
+    const respostaAluno = respostas[questao.id];
 
     return (
       <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
@@ -193,13 +207,15 @@ export default function Simulados() {
           <div className="flex items-center gap-4">
             <button
               onClick={sairDaProva}
-              className="p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 rounded-lg transition-colors"
+              className="p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 rounded-lg transition-colors cursor-pointer"
               aria-label="Sair da prova"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div>
-              <h1 className="font-bold text-slate-900 text-sm">{simuladoAtivo?.titulo}</h1>
+              <h1 className="font-bold text-slate-900 text-sm">
+                {simuladoAtivo?.titulo} {visualizandoGabarito && <span className="text-brand-orange ml-2">· Revisão com Gabarito</span>}
+              </h1>
               <p className="text-xs text-slate-500 font-medium">Questão {questaoAtual + 1} de {questoesProva.length}</p>
             </div>
           </div>
@@ -210,14 +226,32 @@ export default function Simulados() {
               {formatarTempo(segundosRestantes)}
             </div>
           )}
+
+          {resultado && !visualizandoGabarito && (
+            <button
+              onClick={() => { setVisualizandoGabarito(true); setGabaritoReveladoNaQuestao(false); }}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl font-bold text-xs hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <Eye className="w-4 h-4" /> Entrar no Modo Gabarito
+            </button>
+          )}
+
+          {visualizandoGabarito && (
+            <button
+              onClick={() => { setVisualizandoGabarito(false); setGabaritoReveladoNaQuestao(false); }}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-200 transition-colors cursor-pointer"
+            >
+              Voltar ao Sumário
+            </button>
+          )}
         </header>
 
-        {resultado ? (
+        {resultado && !visualizandoGabarito ? (
           <div className="flex-1 flex items-center justify-center p-6">
-            <div className="bg-white rounded-3xl border border-slate-200 p-8 max-w-md w-full text-center">
+            <div className="bg-white rounded-3xl border border-slate-200 p-8 max-w-md w-full text-center shadow-sm">
               <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-4" />
               <h2 className="text-xl font-black text-slate-900 mb-1">Simulado finalizado!</h2>
-              <p className="text-sm text-slate-500 font-medium mb-6">Confira seu resultado:</p>
+              <p className="text-sm text-slate-500 font-medium mb-6">Confira seu desempenho:</p>
 
               <div className="grid grid-cols-3 gap-3 mb-6">
                 <div className="bg-emerald-50 rounded-xl p-3">
@@ -235,14 +269,14 @@ export default function Simulados() {
               </div>
 
               <button
-                onClick={() => navigate('/desempenho')}
-                className="w-full py-3 bg-brand-orange hover:bg-orange-600 text-white font-bold text-sm rounded-xl transition-colors mb-2"
+                onClick={() => { setVisualizandoGabarito(true); setGabaritoReveladoNaQuestao(false); }}
+                className="w-full py-3 bg-brand-orange hover:bg-orange-600 text-white font-bold text-sm rounded-xl transition-colors mb-2 cursor-pointer shadow-md"
               >
-                Ver meu desempenho
+                Ver Gabarito por Demanda
               </button>
               <button
                 onClick={sairDaProva}
-                className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm rounded-xl transition-colors"
+                className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm rounded-xl transition-colors cursor-pointer"
               >
                 Voltar aos Simulados
               </button>
@@ -251,7 +285,7 @@ export default function Simulados() {
         ) : (
           <div className="flex-1 max-w-7xl w-full mx-auto flex flex-col lg:flex-row gap-6 p-6 h-[calc(100vh-4rem)] overflow-hidden">
 
-            <div className="flex-1 bg-white rounded-2xl border border-slate-200 flex flex-col overflow-hidden">
+            <div className="flex-1 bg-white rounded-2xl border border-slate-200 flex flex-col overflow-hidden shadow-sm">
               <div className="p-6 md:p-8 overflow-y-auto flex-1">
                 {!questao ? (
                   <div className="flex items-center justify-center py-20 text-slate-400 gap-2">
@@ -263,7 +297,24 @@ export default function Simulados() {
                       <span className="bg-slate-100 text-slate-600 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
                         {questao.materia}{questao.assunto ? ` · ${questao.assunto}` : ''}
                       </span>
-                      <span className="text-sm font-bold text-slate-400">Questão {questaoAtual + 1}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-bold text-slate-400">Questão {questaoAtual + 1}</span>
+                        
+                        {/* BOTÃO DEDICADO "VER GABARITO" SOB DEMANDA (SÓ APARECE APÓS FINALIZAR) */}
+                        {resultado && (
+                          <button
+                            onClick={() => setGabaritoReveladoNaQuestao(!gabaritoReveladoNaQuestao)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                              gabaritoReveladoNaQuestao 
+                                ? 'bg-slate-200 text-slate-700 hover:bg-slate-300' 
+                                : 'bg-brand-orange text-white hover:bg-orange-600 shadow-sm'
+                            }`}
+                          >
+                            {gabaritoReveladoNaQuestao ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            {gabaritoReveladoNaQuestao ? 'Ocultar Gabarito' : 'Ver Gabarito'}
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     <div className="select-none" onCopy={(e) => e.preventDefault()} onContextMenu={(e) => e.preventDefault()}>
@@ -276,31 +327,75 @@ export default function Simulados() {
                       </p>
 
                       {questao.imagem_url && (
-                        <img src={questao.imagem_url} alt="Ilustração" className="rounded-xl border border-slate-200 max-h-72 mx-auto mb-6" />
+                        <img src={questao.imagem_url} alt="Ilustração" className="rounded-xl border border-slate-200 max-h-72 mx-auto mb-6 object-contain" />
                       )}
 
+                      {/* ALTERNATIVAS */}
                       <div className="space-y-2.5">
-                        {questao.alternativas.map((alt) => (
-                          <button
-                            key={alt.letra}
-                            onClick={() => handleResponder(alt.letra)}
-                            className={`w-full flex items-center text-left p-4 rounded-xl border transition-colors ${
-                              respostas[questao.id] === alt.letra
-                                ? 'border-brand-orange bg-orange-50'
-                                : 'border-slate-200 hover:border-brand-orange/40 bg-white'
-                            }`}
-                          >
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold mr-4 shrink-0 transition-colors ${
-                              respostas[questao.id] === alt.letra ? 'bg-brand-orange text-white' : 'bg-slate-100 text-slate-600'
-                            }`}>
-                              {alt.letra}
-                            </div>
-                            <span className="text-base font-medium text-slate-700">
-                              {alt.blocos?.length > 0 ? <RenderBlocos blocos={alt.blocos} imgHeight="h-10" /> : alt.texto}
-                            </span>
-                          </button>
-                        ))}
+                        {questao.alternativas.map((alt) => {
+                          const isMarcada = respostaAluno === alt.letra;
+                          const isCorreta = alt.letra === questao.resposta_correta;
+
+                          let estilosBota_o = 'border-slate-200 bg-white hover:border-brand-orange/40 text-slate-700';
+                          let estilosCirculo = 'bg-slate-100 text-slate-600';
+
+                          // O gabarito só colore as alternativas se a prova estiver finalizada E o aluno clicar em "Ver Gabarito" nesta questão
+                          if (resultado && gabaritoReveladoNaQuestao) {
+                            if (isCorreta) {
+                              estilosBota_o = 'border-emerald-500 bg-emerald-50/80 text-slate-900';
+                              estilosCirculo = 'bg-emerald-500 text-white';
+                            } else if (isMarcada && !isCorreta) {
+                              estilosBota_o = 'border-red-400 bg-red-50/80 text-slate-900';
+                              estilosCirculo = 'bg-red-500 text-white';
+                            }
+                          } else {
+                            if (isMarcada) {
+                              estilosBota_o = 'border-brand-orange bg-orange-50 text-slate-900';
+                              estilosCirculo = 'bg-brand-orange text-white';
+                            }
+                          }
+
+                          return (
+                            <button
+                              key={alt.letra}
+                              disabled={!!resultado}
+                              onClick={() => handleResponder(alt.letra)}
+                              className={`w-full flex items-center text-left p-4 rounded-xl border transition-colors ${estilosBota_o} ${resultado ? 'cursor-default' : 'cursor-pointer'}`}
+                            >
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold mr-4 shrink-0 transition-colors ${estilosCirculo}`}>
+                                {alt.letra}
+                              </div>
+                              <span className="text-base font-medium flex-1">
+                                {alt.blocos?.length > 0 ? <RenderBlocos blocos={alt.blocos} imgHeight="h-10" /> : alt.texto}
+                              </span>
+
+                              {resultado && gabaritoReveladoNaQuestao && isCorreta && (
+                                <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2.5 py-1 rounded-md ml-2 flex items-center gap-1">
+                                  <Check className="w-3.5 h-3.5" /> Correta
+                                </span>
+                              )}
+                              {resultado && gabaritoReveladoNaQuestao && isMarcada && !isCorreta && (
+                                <span className="text-xs font-bold text-red-600 bg-red-100 px-2.5 py-1 rounded-md ml-2 flex items-center gap-1">
+                                  <XCircle className="w-3.5 h-3.5" /> Sua escolha
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
                       </div>
+
+                      {/* COMENTÁRIO DO PROFESSOR (APARECE SOB DEMANDA JUNTO COM O GABARITO) */}
+                      {resultado && gabaritoReveladoNaQuestao && questao.comentario && (
+                        <div className="mt-6 p-5 bg-orange-50/70 border border-orange-200 rounded-2xl animate-fade-in">
+                          <div className="flex items-center gap-2 mb-2">
+                            <MessageSquare className="w-4 h-4 text-brand-orange" />
+                            <h4 className="font-black text-slate-800 text-sm">Resolução Comentada do Professor</h4>
+                          </div>
+                          <p className="text-sm text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">
+                            {questao.comentario}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </>
                 )}
@@ -308,26 +403,27 @@ export default function Simulados() {
 
               <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center shrink-0">
                 <button
-                  onClick={() => setQuestaoAtual((p) => Math.max(0, p - 1))}
+                  onClick={() => mudarQuestao(Math.max(0, questaoAtual - 1))}
                   disabled={questaoAtual === 0}
-                  className="flex items-center px-4 py-2.5 text-slate-600 font-bold hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50"
+                  className="flex items-center px-4 py-2.5 text-slate-600 font-bold hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
                 >
                   <ChevronLeft className="w-5 h-5 mr-1" /> Anterior
                 </button>
 
-                {questaoAtual === questoesProva.length - 1 ? (
+                {!resultado && questaoAtual === questoesProva.length - 1 ? (
                   <button
                     onClick={handleFinalizar}
                     disabled={finalizando}
-                    className="flex items-center px-6 py-2.5 bg-green-500 hover:bg-green-600 text-white font-bold rounded-lg transition-colors shadow-md disabled:opacity-70"
+                    className="flex items-center px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors shadow-md disabled:opacity-70 cursor-pointer"
                   >
                     {finalizando ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <CheckCircle2 className="w-5 h-5 mr-2" />}
                     Finalizar Prova
                   </button>
                 ) : (
                   <button
-                    onClick={() => setQuestaoAtual((p) => Math.min(questoesProva.length - 1, p + 1))}
-                    className="flex items-center px-6 py-2.5 bg-brand-orange hover:bg-orange-600 text-white font-bold rounded-lg transition-colors shadow-md"
+                    onClick={() => mudarQuestao(Math.min(questoesProva.length - 1, questaoAtual + 1))}
+                    disabled={questaoAtual === questoesProva.length - 1}
+                    className="flex items-center px-6 py-2.5 bg-brand-orange hover:bg-orange-600 disabled:opacity-50 text-white font-bold rounded-lg transition-colors shadow-md cursor-pointer"
                   >
                     Próxima <ChevronRight className="w-5 h-5 ml-1" />
                   </button>
@@ -335,7 +431,7 @@ export default function Simulados() {
               </div>
             </div>
 
-            <div className="w-full lg:w-80 bg-white rounded-2xl border border-slate-200 flex flex-col overflow-hidden shrink-0">
+            <div className="w-full lg:w-80 bg-white rounded-2xl border border-slate-200 flex flex-col overflow-hidden shrink-0 shadow-sm">
               <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
                 <LayoutGrid className="w-5 h-5 text-slate-600" />
                 <h3 className="font-bold text-slate-800">Mapa de Questões</h3>
@@ -346,16 +442,30 @@ export default function Simulados() {
                   {questoesProva.map((q, i) => {
                     const isRespondida = !!respostas[q.id];
                     const isAtual = questaoAtual === i;
+                    const escolhida = respostas[q.id];
+                    const correta = q.resposta_correta;
+
+                    let corMapa = 'bg-slate-100 text-slate-500 hover:bg-slate-200 border-transparent';
+                    if (resultado && visualizandoGabarito) {
+                      if (escolhida === correta) {
+                        corMapa = 'bg-emerald-100 text-emerald-700 border-emerald-300';
+                      } else if (escolhida) {
+                        corMapa = 'bg-red-100 text-red-700 border-red-300';
+                      } else {
+                        corMapa = 'bg-slate-100 text-slate-400 border-slate-200';
+                      }
+                    } else if (isRespondida) {
+                      corMapa = 'bg-brand-orange/20 text-brand-orange border-brand-orange/30';
+                    }
+
                     return (
                       <button
                         key={q.id}
-                        onClick={() => setQuestaoAtual(i)}
-                        className={`h-10 rounded-lg text-sm font-bold flex items-center justify-center transition-all ${
+                        onClick={() => mudarQuestao(i)}
+                        className={`h-10 rounded-lg text-sm font-bold flex items-center justify-center transition-all border cursor-pointer ${
                           isAtual
-                            ? 'ring-2 ring-brand-orange ring-offset-2 bg-slate-900 text-white'
-                            : isRespondida
-                              ? 'bg-brand-orange/20 text-brand-orange border border-brand-orange/30'
-                              : 'bg-slate-100 text-slate-500 hover:bg-slate-200 border border-transparent'
+                            ? 'ring-2 ring-brand-orange ring-offset-2 bg-slate-900 text-white border-slate-900'
+                            : corMapa
                         }`}
                       >
                         {i + 1}
@@ -365,13 +475,26 @@ export default function Simulados() {
                 </div>
               </div>
 
-              <div className="p-4 border-t border-slate-100 bg-slate-50">
-                <div className="flex items-center gap-3 text-xs font-medium text-slate-600 mb-2">
-                  <div className="w-3 h-3 rounded-full bg-brand-orange/20 border border-brand-orange/30"></div> Respondidas ({Object.keys(respostas).length})
-                </div>
-                <div className="flex items-center gap-3 text-xs font-medium text-slate-600">
-                  <div className="w-3 h-3 rounded-full bg-slate-100 border border-slate-200"></div> Em branco ({questoesProva.length - Object.keys(respostas).length})
-                </div>
+              <div className="p-4 border-t border-slate-100 bg-slate-50 space-y-1.5">
+                {resultado && visualizandoGabarito ? (
+                  <>
+                    <div className="flex items-center gap-3 text-xs font-medium text-slate-600">
+                      <div className="w-3 h-3 rounded-full bg-emerald-500"></div> Acertou
+                    </div>
+                    <div className="flex items-center gap-3 text-xs font-medium text-slate-600">
+                      <div className="w-3 h-3 rounded-full bg-red-500"></div> Errou / Em branco
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3 text-xs font-medium text-slate-600">
+                      <div className="w-3 h-3 rounded-full bg-brand-orange/20 border border-brand-orange/30"></div> Respondidas ({Object.keys(respostas).length})
+                    </div>
+                    <div className="flex items-center gap-3 text-xs font-medium text-slate-600">
+                      <div className="w-3 h-3 rounded-full bg-slate-100 border border-slate-200"></div> Em branco ({questoesProva.length - Object.keys(respostas).length})
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -385,7 +508,6 @@ export default function Simulados() {
   // ==========================================
   return (
     <div className="flex h-screen bg-[#f3f4f6] font-sans overflow-hidden">
-
       <Sidebar />
 
       <main className="flex-1 overflow-y-auto p-6 md:p-10">
@@ -394,7 +516,7 @@ export default function Simulados() {
           <div className="flex items-center gap-4 mb-8">
             <button
               onClick={handleVoltar}
-              className="w-9 h-9 bg-white rounded-full flex items-center justify-center text-slate-500 hover:text-brand-orange border border-slate-200 transition-colors shrink-0"
+              className="w-9 h-9 bg-white rounded-full flex items-center justify-center text-slate-500 hover:text-brand-orange border border-slate-200 transition-colors shrink-0 cursor-pointer"
               aria-label="Voltar ao dashboard"
             >
               <ArrowLeft className="w-4.5 h-4.5" />
@@ -408,7 +530,7 @@ export default function Simulados() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <button
               onClick={() => setTipoSelecionado('oficial')}
-              className={`p-5 rounded-2xl border text-left transition-colors ${tipoSelecionado === 'oficial' ? 'border-brand-orange bg-white' : 'border-slate-200 bg-white hover:border-orange-200'}`}
+              className={`p-5 rounded-2xl border text-left transition-colors cursor-pointer ${tipoSelecionado === 'oficial' ? 'border-brand-orange bg-white shadow-sm' : 'border-slate-200 bg-white hover:border-orange-200'}`}
             >
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${tipoSelecionado === 'oficial' ? 'bg-brand-orange text-white' : 'bg-orange-50 text-brand-orange'}`}>
                 <Target className="w-5 h-5" />
@@ -419,7 +541,7 @@ export default function Simulados() {
 
             <button
               onClick={() => setTipoSelecionado('assunto')}
-              className={`p-5 rounded-2xl border text-left transition-colors ${tipoSelecionado === 'assunto' ? 'border-brand-orange bg-white' : 'border-slate-200 bg-white hover:border-orange-200'}`}
+              className={`p-5 rounded-2xl border text-left transition-colors cursor-pointer ${tipoSelecionado === 'assunto' ? 'border-brand-orange bg-white shadow-sm' : 'border-slate-200 bg-white hover:border-orange-200'}`}
             >
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${tipoSelecionado === 'assunto' ? 'bg-brand-orange text-white' : 'bg-orange-50 text-brand-orange'}`}>
                 <BookOpen className="w-5 h-5" />
@@ -430,7 +552,7 @@ export default function Simulados() {
 
             <button
               onClick={() => setTipoSelecionado('personalizado')}
-              className={`p-5 rounded-2xl border text-left transition-colors ${tipoSelecionado === 'personalizado' ? 'border-brand-orange bg-white' : 'border-slate-200 bg-white hover:border-orange-200'}`}
+              className={`p-5 rounded-2xl border text-left transition-colors cursor-pointer ${tipoSelecionado === 'personalizado' ? 'border-brand-orange bg-white shadow-sm' : 'border-slate-200 bg-white hover:border-orange-200'}`}
             >
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${tipoSelecionado === 'personalizado' ? 'bg-brand-orange text-white' : 'bg-orange-50 text-brand-orange'}`}>
                 <Settings2 className="w-5 h-5" />
@@ -440,7 +562,7 @@ export default function Simulados() {
             </button>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 md:p-7">
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 md:p-7 shadow-sm">
 
             {tipoSelecionado === 'oficial' && (
               <div>
@@ -466,7 +588,7 @@ export default function Simulados() {
                         <button
                           onClick={() => iniciarOficial(s)}
                           disabled={carregandoProva}
-                          className="flex items-center gap-2 px-5 py-2.5 bg-brand-orange hover:bg-orange-600 text-white font-bold text-sm rounded-xl transition-colors disabled:opacity-70"
+                          className="flex items-center gap-2 px-5 py-2.5 bg-brand-orange hover:bg-orange-600 text-white font-bold text-sm rounded-xl transition-colors disabled:opacity-70 cursor-pointer"
                         >
                           {carregandoProva && simuladoAtivo?.id === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlayCircle className="w-4 h-4" />}
                           Iniciar
@@ -496,7 +618,7 @@ export default function Simulados() {
                         <button
                           key={a}
                           onClick={() => setAssuntoSelecionado(a)}
-                          className={`p-3.5 border rounded-xl text-center font-bold text-sm transition-colors ${assuntoSelecionado === a ? 'bg-brand-orange text-white border-brand-orange' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-brand-orange/40'}`}
+                          className={`p-3.5 border rounded-xl text-center font-bold text-sm transition-colors cursor-pointer ${assuntoSelecionado === a ? 'bg-brand-orange text-white border-brand-orange shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-brand-orange/40'}`}
                         >
                           {a}
                         </button>
@@ -505,7 +627,7 @@ export default function Simulados() {
                     <button
                       onClick={iniciarPorAssunto}
                       disabled={!assuntoSelecionado || gerando}
-                      className="flex items-center justify-center gap-2 w-full md:w-auto px-6 py-3 bg-brand-orange disabled:bg-slate-300 hover:bg-orange-600 text-white font-bold text-sm rounded-xl transition-colors"
+                      className="flex items-center justify-center gap-2 w-full md:w-auto px-6 py-3 bg-brand-orange disabled:bg-slate-300 hover:bg-orange-600 text-white font-bold text-sm rounded-xl transition-colors cursor-pointer"
                     >
                       {gerando ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlayCircle className="w-5 h-5" />}
                       Iniciar Treino
@@ -525,7 +647,7 @@ export default function Simulados() {
                         <button
                           key={num}
                           onClick={() => setQuantidadePersonalizada(num)}
-                          className={`px-5 py-2.5 border rounded-xl font-bold text-sm transition-colors ${quantidadePersonalizada === num ? 'bg-brand-orange text-white border-brand-orange' : 'border-slate-200 bg-slate-50 hover:border-brand-orange text-slate-700'}`}
+                          className={`px-5 py-2.5 border rounded-xl font-bold text-sm transition-colors cursor-pointer ${quantidadePersonalizada === num ? 'bg-brand-orange text-white border-brand-orange shadow-sm' : 'border-slate-200 bg-slate-50 hover:border-brand-orange text-slate-700'}`}
                         >
                           {num}
                         </button>
@@ -544,7 +666,7 @@ export default function Simulados() {
                         <button
                           key={op.valor}
                           onClick={() => setDificuldadePersonalizada(op.valor)}
-                          className={`px-5 py-2.5 border rounded-xl font-bold text-sm transition-colors ${dificuldadePersonalizada === op.valor ? 'bg-brand-orange text-white border-brand-orange' : 'border-slate-200 bg-slate-50 hover:border-brand-orange text-slate-700'}`}
+                          className={`px-5 py-2.5 border rounded-xl font-bold text-sm transition-colors cursor-pointer ${dificuldadePersonalizada === op.valor ? 'bg-brand-orange text-white border-brand-orange shadow-sm' : 'border-slate-200 bg-slate-50 hover:border-brand-orange text-slate-700'}`}
                         >
                           {op.label}
                         </button>
@@ -555,7 +677,7 @@ export default function Simulados() {
                 <button
                   onClick={iniciarPersonalizado}
                   disabled={gerando}
-                  className="flex items-center justify-center gap-2 w-full md:w-auto px-6 py-3 bg-brand-orange hover:bg-orange-600 text-white font-bold text-sm rounded-xl transition-colors disabled:opacity-70"
+                  className="flex items-center justify-center gap-2 w-full md:w-auto px-6 py-3 bg-brand-orange hover:bg-orange-600 text-white font-bold text-sm rounded-xl transition-colors disabled:opacity-70 cursor-pointer"
                 >
                   {gerando ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlayCircle className="w-5 h-5" />}
                   Gerar Simulado

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
-  Search, Filter, BookOpen, ChevronDown,
-  MessageSquare, Bookmark, FileText, Loader2, ChevronLeft, ChevronRight
+  Search, Filter, BookOpen,
+  MessageSquare, Bookmark, FileText, Loader2, ChevronLeft, ChevronRight, Folder
 } from 'lucide-react';
 import Sidebar from './Sidebar';
 import { useQuestoes } from '../hooks/useQuestoes';
@@ -12,13 +12,15 @@ export default function BancoQuestoes() {
   const [mostrarComentario, setMostrarComentario] = useState(false);
   const [busca, setBusca] = useState('');
   const [dificuldade, setDificuldade] = useState('');
+  const [assuntoFiltro, setAssuntoFiltro] = useState('');
   const [pagina, setPagina] = useState(0);
 
-  const { questoes, total, loading, error, responder } = useQuestoes({
+  const { questoes, total, loading, error, responder, assuntosArvore } = useQuestoes({
     busca,
     dificuldade,
+    assuntoId: assuntoFiltro,
     pagina,
-    porPagina: 1, // uma questão por vez, igual o fluxo original
+    porPagina: 1,
   });
 
   const questaoAtual = questoes[0];
@@ -74,14 +76,14 @@ export default function BancoQuestoes() {
         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
 
           {/* BARRA LATERAL DE FILTROS */}
-          <div className="w-full md:w-64 bg-white border-r border-slate-200 overflow-y-auto shrink-0 p-5 flex flex-col gap-5">
+          <div className="w-full md:w-72 bg-white border-r border-slate-200 overflow-y-auto shrink-0 p-5 flex flex-col gap-6">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
                 <Filter className="w-4 h-4 text-brand-orange" /> Filtros
               </h3>
               <button
-                onClick={() => { setBusca(''); setDificuldade(''); setPagina(0); }}
-                className="text-xs font-bold text-slate-400 hover:text-brand-orange transition-colors"
+                onClick={() => { setBusca(''); setDificuldade(''); setAssuntoFiltro(''); setPagina(0); }}
+                className="text-xs font-bold text-slate-400 hover:text-brand-orange transition-colors cursor-pointer"
               >
                 Limpar
               </button>
@@ -98,6 +100,41 @@ export default function BancoQuestoes() {
               />
             </div>
 
+            {/* FILTRO POR ÁRVORE DE ASSUNTOS DINÂMICO */}
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2.5">
+                Assuntos e Tópicos
+              </label>
+              <div className="space-y-1 max-h-56 overflow-y-auto pr-1">
+                <button
+                  onClick={() => { setAssuntoFiltro(''); setPagina(0); }}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                    !assuntoFiltro ? 'bg-orange-50 text-brand-orange' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  Todos os Assuntos
+                </button>
+
+                {/* Listando os assuntos da árvore vindos do banco */}
+                {assuntosArvore && assuntosArvore.length > 0 ? (
+                  assuntosArvore.map((assunto) => (
+                    <button
+                      key={assunto.id}
+                      onClick={() => { setAssuntoFiltro(assunto.id); setPagina(0); }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-2 cursor-pointer ${
+                        assuntoFiltro === assunto.id ? 'bg-orange-50 text-brand-orange' : 'text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Folder className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span className="truncate">{assunto.nome}</span>
+                    </button>
+                  ))
+                ) : (
+                  <p className="text-[11px] text-slate-400 px-3 py-2">Nenhum assunto cadastrado na árvore.</p>
+                )}
+              </div>
+            </div>
+
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2.5">
                 Dificuldade
@@ -112,7 +149,7 @@ export default function BancoQuestoes() {
                   <button
                     key={opt.valor}
                     onClick={() => { setDificuldade(opt.valor); setPagina(0); }}
-                    className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-colors ${
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-colors cursor-pointer ${
                       dificuldade === opt.valor
                         ? 'border-brand-orange bg-orange-50 text-brand-orange'
                         : 'border-slate-200 text-slate-600 hover:border-brand-orange hover:text-brand-orange'
@@ -145,7 +182,7 @@ export default function BancoQuestoes() {
                 <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center">
                   <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3" />
                   <h3 className="font-bold text-slate-700 mb-1">Nenhuma questão por aqui ainda</h3>
-                  <p className="text-sm text-slate-500">Assim que o professor cadastrar questões da sua turma, elas aparecem aqui.</p>
+                  <p className="text-sm text-slate-500">Assim que o professor cadastrar questões vinculadas aos assuntos, elas aparecem aqui.</p>
                 </div>
               )}
 
@@ -160,19 +197,35 @@ export default function BancoQuestoes() {
                   <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
                     <div className="bg-slate-50 border-b border-slate-100 px-5 py-3 flex items-center justify-between">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md flex items-center gap-1">
-                          <BookOpen className="w-3 h-3" /> {questaoAtual.materia}
-                        </span>
-                        <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">
-                          {questaoAtual.assunto}
-                        </span>
+                        {/* TAG DA MATÉRIA / CATEGORIA PAI */}
+                        {questaoAtual.assuntos_hierarquia?.categoria_pai ? (
+                          <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md flex items-center gap-1">
+                            <BookOpen className="w-3 h-3" /> {questaoAtual.assuntos_hierarquia.categoria_pai.nome}
+                          </span>
+                        ) : questaoAtual.materia && (
+                          <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md flex items-center gap-1">
+                            <BookOpen className="w-3 h-3" /> {questaoAtual.materia}
+                          </span>
+                        )}
+
+                        {/* TAG DO ASSUNTO / SUBCATEGORIA */}
+                        {questaoAtual.assuntos_hierarquia ? (
+                          <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">
+                            {questaoAtual.assuntos_hierarquia.nome}
+                          </span>
+                        ) : questaoAtual.assunto && (
+                          <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">
+                            {questaoAtual.assunto}
+                          </span>
+                        )}
+
                         {questaoAtual.banca && (
                           <span className="text-xs font-bold text-slate-500 bg-white border border-slate-200 px-2.5 py-1 rounded-md">
                             {questaoAtual.banca}{questaoAtual.ano ? ` · ${questaoAtual.ano}` : ''}
                           </span>
                         )}
                       </div>
-                      <button className="text-slate-400 hover:text-brand-orange transition-colors">
+                      <button className="text-slate-400 hover:text-brand-orange transition-colors cursor-pointer">
                         <Bookmark className="w-4.5 h-4.5" />
                       </button>
                     </div>
@@ -200,7 +253,7 @@ export default function BancoQuestoes() {
                             key={alt.letra}
                             disabled={respondida}
                             onClick={() => setRespostaSelecionada(alt.letra)}
-                            className={`w-full flex items-center gap-3.5 p-3.5 rounded-xl border text-left transition-colors group ${
+                            className={`w-full flex items-center gap-3.5 p-3.5 rounded-xl border text-left transition-colors group cursor-pointer ${
                               respondida && alt.letra === questaoAtual.resposta_correta
                                 ? 'border-emerald-500 bg-emerald-50/60'
                                 : respondida && alt.letra === respostaSelecionada
@@ -227,7 +280,7 @@ export default function BancoQuestoes() {
                       <button
                         onClick={() => setMostrarComentario(!mostrarComentario)}
                         disabled={!respondida}
-                        className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-brand-orange transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-brand-orange transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                       >
                         <MessageSquare className="w-4 h-4" /> Comentário do Professor
                       </button>
@@ -236,14 +289,14 @@ export default function BancoQuestoes() {
                         <button
                           onClick={handleResponder}
                           disabled={!respostaSelecionada}
-                          className="px-5 py-2 bg-brand-orange hover:bg-orange-600 disabled:bg-slate-300 text-white font-bold text-sm rounded-lg transition-colors"
+                          className="px-5 py-2 bg-brand-orange hover:bg-orange-600 disabled:bg-slate-300 text-white font-bold text-sm rounded-lg transition-colors cursor-pointer"
                         >
                           Responder
                         </button>
                       ) : (
                         <button
                           onClick={irParaProxima}
-                          className="flex items-center gap-1.5 px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-lg transition-colors"
+                          className="flex items-center gap-1.5 px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-lg transition-colors cursor-pointer"
                         >
                           Próxima <ChevronRight className="w-4 h-4" />
                         </button>
@@ -273,7 +326,7 @@ export default function BancoQuestoes() {
                     <button
                       onClick={irParaAnterior}
                       disabled={pagina === 0}
-                      className="flex items-center gap-1.5 px-4 py-2 text-slate-600 font-bold text-sm hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="flex items-center gap-1.5 px-4 py-2 text-slate-600 font-bold text-sm hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                     >
                       <ChevronLeft className="w-4 h-4" /> Anterior
                     </button>

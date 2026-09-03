@@ -23,6 +23,7 @@ import AdminModulos from './Admin/AdminModulos';
 import AdminNovaQuestao from './pages/AdminNovaQuestao';
 import AdminNovoSimulado from './Admin/AdminNovoSimulado';
 import AdminCronograma from './Admin/AdminCronograma';
+import AdminEditarQuestao from './Admin/AdminEditarQuestao';
 import AdminAssuntos from './Admin/AdminAssuntos';
 import BancoQuestoes from './pages/BancoQuestoes';
 import Desempenho from './pages/Desempenho';
@@ -47,6 +48,7 @@ function App() {
           <Route path="/player" element={<ProtectedRoute><PlayerAulas /></ProtectedRoute>} />
           <Route path="/banco-questoes" element={<ProtectedRoute><BancoQuestoes /></ProtectedRoute>} />
           <Route path="/admin/cronograma" element={<AdminRoute><AdminCronograma /></AdminRoute>} />
+          <Route path="/admin/editar-questao/:id" element={<AdminRoute><AdminEditarQuestao /></AdminRoute>} />
           <Route path="/desempenho" element={<ProtectedRoute><Desempenho /></ProtectedRoute>} />
           <Route path="/plano-estudos" element={<ProtectedRoute><PlanoEstudos /></ProtectedRoute>} />
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Search, Plus, MoreHorizontal, ChevronDown, FileQuestion, ClipboardList, Loader2, Trash2, Eye, X } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Search, Plus, MoreHorizontal, ChevronDown, FileQuestion, ClipboardList, Loader2, Trash2, Eye, X, Edit } from 'lucide-react';
 import AdminSidebar from './AdminSidebar';
 import { useAdminQuestoes, useAdminSimulados, useTurmas } from '../hooks/useAdmin';
 import { buscarQuestoesDoSimulado } from '../hooks/useSimulados';
@@ -15,6 +15,7 @@ const DIFICULDADE_STYLE = {
 const DIFICULDADE_LABEL = { facil: 'Fácil', medio: 'Médio', dificil: 'Difícil' };
 
 export default function AdminSimuladosQuestoes() {
+  const navigate = useNavigate();
   const [aba, setAba] = useState('questoes');
   const [busca, setBusca] = useState('');
   const [turmaFiltro, setTurmaFiltro] = useState('');
@@ -82,7 +83,7 @@ export default function AdminSimuladosQuestoes() {
             <div className="flex p-1 bg-white border border-slate-200 rounded-xl w-fit">
               <button
                 onClick={() => setAba('questoes')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-colors ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-colors cursor-pointer ${
                   aba === 'questoes' ? 'bg-brand-orange text-white' : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
@@ -90,7 +91,7 @@ export default function AdminSimuladosQuestoes() {
               </button>
               <button
                 onClick={() => setAba('simulados')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-colors ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-colors cursor-pointer ${
                   aba === 'simulados' ? 'bg-brand-orange text-white' : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
@@ -115,7 +116,7 @@ export default function AdminSimuladosQuestoes() {
                 <select
                   value={turmaFiltro}
                   onChange={(e) => setTurmaFiltro(e.target.value)}
-                  className="appearance-none bg-white border border-slate-200 rounded-xl py-2.5 pl-4 pr-10 text-sm font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-orange focus:border-brand-orange transition-colors"
+                  className="appearance-none bg-white border border-slate-200 rounded-xl py-2.5 pl-4 pr-10 text-sm font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-orange focus:border-brand-orange transition-colors cursor-pointer"
                 >
                   <option value="">Todas as turmas</option>
                   {turmas.map((t) => (
@@ -185,21 +186,27 @@ export default function AdminSimuladosQuestoes() {
                             <td className="px-6 py-3.5 whitespace-nowrap text-right relative">
                               <button
                                 onClick={(e) => { e.stopPropagation(); setMenuAberto(menuAberto === q.id ? null : q.id); }}
-                                className="text-slate-400 hover:text-brand-orange transition-colors p-1.5"
+                                className="text-slate-400 hover:text-brand-orange transition-colors p-1.5 cursor-pointer"
                               >
                                 <MoreHorizontal className="w-4.5 h-4.5" />
                               </button>
                               {menuAberto === q.id && (
                                 <div className="absolute right-6 top-10 z-10 bg-white border border-slate-200 rounded-xl shadow-lg py-1 w-40">
                                   <button
-                                    onClick={() => { setQuestaoVisualizando(q); setMenuAberto(null); }}
-                                    className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                                    onClick={(e) => { e.stopPropagation(); setQuestaoVisualizando(q); setMenuAberto(null); }}
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
                                   >
                                     <Eye className="w-4 h-4" /> Visualizar
                                   </button>
                                   <button
-                                    onClick={() => handleExcluirQuestao(q.id)}
-                                    className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+                                    onClick={(e) => { e.stopPropagation(); navigate(`/admin/editar-questao/${q.id}`); setMenuAberto(null); }}
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                                  >
+                                    <Edit className="w-4 h-4" /> Editar
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleExcluirQuestao(q.id); }}
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
                                   >
                                     <Trash2 className="w-4 h-4" /> Excluir
                                   </button>
@@ -264,7 +271,7 @@ export default function AdminSimuladosQuestoes() {
                             <td className="px-6 py-3.5 whitespace-nowrap text-right relative">
                               <button
                                 onClick={(e) => { e.stopPropagation(); setMenuAberto(menuAberto === s.id ? null : s.id); }}
-                                className="text-slate-400 hover:text-brand-orange transition-colors p-1.5"
+                                className="text-slate-400 hover:text-brand-orange transition-colors p-1.5 cursor-pointer"
                               >
                                 <MoreHorizontal className="w-4.5 h-4.5" />
                               </button>
@@ -272,13 +279,13 @@ export default function AdminSimuladosQuestoes() {
                                 <div className="absolute right-6 top-10 z-10 bg-white border border-slate-200 rounded-xl shadow-lg py-1 w-40">
                                   <button
                                     onClick={(e) => { e.stopPropagation(); abrirVisualizacaoSimulado(s); setMenuAberto(null); }}
-                                    className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
                                   >
                                     <Eye className="w-4 h-4" /> Visualizar
                                   </button>
                                   <button
                                     onClick={(e) => { e.stopPropagation(); handleExcluirSimulado(s.id); }}
-                                    className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
                                   >
                                     <Trash2 className="w-4 h-4" /> Excluir
                                   </button>
@@ -324,7 +331,7 @@ export default function AdminSimuladosQuestoes() {
               </p>
               <button
                 onClick={() => setQuestaoVisualizando(null)}
-                className="w-8 h-8 bg-white rounded-full flex items-center justify-center text-slate-500 hover:text-slate-900 shrink-0"
+                className="w-8 h-8 bg-white rounded-full flex items-center justify-center text-slate-500 hover:text-slate-900 shrink-0 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -344,6 +351,7 @@ export default function AdminSimuladosQuestoes() {
           </div>
         </div>
       )}
+
       {/* MODAL: VISUALIZAR SIMULADO */}
       {simuladoVisualizando && (
         <div
@@ -364,7 +372,7 @@ export default function AdminSimuladosQuestoes() {
                 </div>
                 <button
                   onClick={fecharVisualizacaoSimulado}
-                  className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-200 transition-colors shrink-0"
+                  className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-200 transition-colors shrink-0 cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
