@@ -8,6 +8,17 @@ import { criarBloco, processarBlocos, blocosParaTexto } from '../lib/blocos';
 
 const LETRAS = ['A', 'B', 'C', 'D', 'E'];
 
+// Função interna para formatar a URL do vídeo de resolução do YouTube
+const formatarUrlVideo = (url) => {
+  if (!url) return '';
+  if (url.includes('embed')) return url;
+  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+  if (match && match[1]) {
+    return `https://www.youtube.com/embed/${match[1]}`;
+  }
+  return url;
+};
+
 export default function AdminNovaQuestao() {
   const [turmas, setTurmas] = useState([]);
   const [assuntosArvore, setAssuntosArvore] = useState([]);
@@ -16,8 +27,8 @@ export default function AdminNovaQuestao() {
 
   const [turmaId, setTurmaId] = useState('');
   const [materia, setMateria] = useState('');
-  const [assuntoId, setAssuntoId] = useState(''); // 👈 ID da árvore hierárquica
-  const [assuntoTexto, setAssuntoTexto] = useState(''); // Fallback opcional
+  const [assuntoId, setAssuntoId] = useState(''); 
+  const [assuntoTexto, setAssuntoTexto] = useState('');
   const [dificuldade, setDificuldade] = useState('medio');
   const [comentario, setComentario] = useState('');
   const [videoResolucaoUrl, setVideoResolucaoUrl] = useState('');
@@ -25,14 +36,17 @@ export default function AdminNovaQuestao() {
   const [ano, setAno] = useState(new Date().getFullYear());
   const [banca, setBanca] = useState('Inédita');
 
-  // Enunciado em blocos (texto/imagem intercalados)
-  const [blocosEnunciado, setBlocosEnunciado] = useState([criarBloco('texto')]);
+  // Enunciado Superior (Texto antes da tabela/gráfico)
+  const [blocosEnunciadoSuperior, setBlocosEnunciadoSuperior] = useState([criarBloco('texto')]);
 
-  // Gráfico/imagem principal, em destaque abaixo do enunciado
+  // Gráfico / Tabela principal em destaque centralizada (Fica no meio)
   const [imagemPrincipalFile, setImagemPrincipalFile] = useState(null);
   const [imagemPrincipalPreview, setImagemPrincipalPreview] = useState(null);
 
-  // Cada alternativa também tem seus próprios blocos de texto/imagem
+  // Enunciado Inferior (Texto / Comando após a tabela/gráfico)
+  const [blocosEnunciadoInferior, setBlocosEnunciadoInferior] = useState([]);
+
+  // Cada alternativa possui seus próprios blocos de texto/imagem
   const [alternativasBlocos, setAlternativasBlocos] = useState(() =>
     Object.fromEntries(LETRAS.map((letra) => [letra, [criarBloco('texto')]]))
   );
@@ -74,18 +88,9 @@ export default function AdminNovaQuestao() {
     setImagemPrincipalPreview(null);
   };
 
-  const formatarUrlVideo = (url) => {
-    if (!url) return '';
-    if (url.includes('embed')) return url;
-    const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
-    if (match && match[1]) {
-      return `https://www.youtube.com/embed/${match[1]}`;
-    }
-    return url;
-  };
-
   const resetarFormulario = () => {
-    setBlocosEnunciado([criarBloco('texto')]);
+    setBlocosEnunciadoSuperior([criarBloco('texto')]);
+    setBlocosEnunciadoInferior([]);
     setAlternativasBlocos(Object.fromEntries(LETRAS.map((letra) => [letra, [criarBloco('texto')]])));
     removerImagemPrincipal();
     setComentario('');
@@ -102,10 +107,16 @@ export default function AdminNovaQuestao() {
     setSucesso(false);
 
     try {
-      // 1. Sobe as imagens do enunciado
-      const blocosEnunciadoProntos = await processarBlocos(supabase, blocosEnunciado, turmaId, 'enunciado');
+      // 1. Sobe os blocos superiores e inferiores
+      const blocosSupProntos = await processarBlocos(supabase, blocosEnunciadoSuperior, turmaId, 'enunciado-sup');
+      const blocosInfProntos = blocosEnunciadoInferior.length > 0 
+        ? await processarBlocos(supabase, blocosEnunciadoInferior, turmaId, 'enunciado-inf')
+        : [];
 
-      // 2. Sobe a imagem principal/gráfico, se tiver
+      // Junta todos os blocos para compatibilidade com o campo geral "enunciado" e "blocos_enunciado"
+      const todosBlocosUnificados = [...blocosSupProntos, ...blocosInfProntos];
+
+      // 2. Sobe a imagem principal / quadro estatístico ou gráfico em destaque, se houver
       let imagemPrincipalUrl = null;
       if (imagemPrincipalFile) {
         const fileExt = imagemPrincipalFile.name.split('.').pop();
@@ -130,7 +141,7 @@ export default function AdminNovaQuestao() {
 
       const urlVideoFormatada = formatarUrlVideo(videoResolucaoUrl);
 
-      // Pega o nome do assunto selecionado para compatibilidade
+      // Pega o nome do assunto selecionado
       const assuntoSelecionadoObj = assuntosArvore.find(a => a.id === assuntoId);
       const nomeAssuntoFinal = assuntoSelecionadoObj ? assuntoSelecionadoObj.nome : assuntoTexto;
 
@@ -138,10 +149,12 @@ export default function AdminNovaQuestao() {
         turma_id: turmaId,
         materia,
         assunto: nomeAssuntoFinal,
-        assunto_id: assuntoId, // 👈 Vínculo com a tabela assuntos_hierarquia
+        assunto_id: assuntoId,
         dificuldade,
-        enunciado: blocosParaTexto(blocosEnunciadoProntos),
-        blocos_enunciado: blocosEnunciadoProntos,
+        enunciado: blocosParaTexto(todosBlocosUnificados),
+        blocos_enunciado: todosBlocosUnificados,
+        blocos_enunciado_superior: blocosSupProntos,
+        blocos_enunciado_inferior: blocosInfProntos,
         imagem_url: imagemPrincipalUrl,
         alternativas: alternativasFormatadas,
         resposta_correta: respostaCorreta,
@@ -169,7 +182,6 @@ export default function AdminNovaQuestao() {
   const assuntoSelecionadoObj = assuntosArvore.find(a => a.id === assuntoId);
   const previewVideoUrlFormatado = formatarUrlVideo(videoResolucaoUrl);
 
-  // Organiza pais e subitens para o select
   const principais = assuntosArvore.filter(a => !a.categoria_pai_id);
   const getSub = (paiId) => assuntosArvore.filter(a => a.categoria_pai_id === paiId);
 
@@ -186,7 +198,7 @@ export default function AdminNovaQuestao() {
               <PlusCircle className="w-6 h-6 text-brand-orange" />
               Adicionar Nova Questão
             </h1>
-            <p className="text-sm text-slate-500 font-medium mt-1">Enunciado e alternativas com texto e imagem intercalados.</p>
+            <p className="text-sm text-slate-500 font-medium mt-1">Layout clássico de prova: Texto Superior ➔ Tabela/Gráfico Central ➔ Texto Inferior.</p>
           </div>
         </div>
 
@@ -208,7 +220,7 @@ export default function AdminNovaQuestao() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">Turma / Nicho</label>
-                  <select value={turmaId} onChange={(e) => setTurmaId(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium">
+                  <select value={turmaId} onChange={(e) => setTurmaId(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium cursor-pointer">
                     {turmas.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
                   </select>
                 </div>
@@ -224,7 +236,7 @@ export default function AdminNovaQuestao() {
                     required 
                     value={assuntoId} 
                     onChange={(e) => setAssuntoId(e.target.value)} 
-                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium text-slate-700"
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium text-slate-700 cursor-pointer"
                   >
                     <option value="">Selecione a categoria/subcategoria...</option>
                     {principais.map(pai => {
@@ -245,7 +257,7 @@ export default function AdminNovaQuestao() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">Dificuldade</label>
-                  <select value={dificuldade} onChange={(e) => setDificuldade(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium">
+                  <select value={dificuldade} onChange={(e) => setDificuldade(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium cursor-pointer">
                     <option value="facil">Fácil</option>
                     <option value="medio">Médio</option>
                     <option value="dificil">Difícil</option>
@@ -262,33 +274,40 @@ export default function AdminNovaQuestao() {
               </div>
             </div>
 
-            {/* Enunciado em blocos */}
+            {/* 1. Enunciado Superior (Texto Inicial) */}
             <div>
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1 border-b border-slate-100 pb-2">Enunciado</h3>
-              <p className="text-xs text-slate-500 mb-3">Intercale trechos de texto e imagens pequenas na ordem que devem aparecer.</p>
-              <BlocoEditor blocos={blocosEnunciado} onChange={setBlocosEnunciado} />
+              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1 border-b border-slate-100 pb-2">1. Enunciado (Texto Superior / Introdução)</h3>
+              <p className="text-xs text-slate-500 mb-3">Insira o texto introdutório que fica <b>acima</b> da tabela ou gráfico.</p>
+              <BlocoEditor blocos={blocosEnunciadoSuperior} onChange={setBlocosEnunciadoSuperior} />
             </div>
 
-            {/* Gráfico / imagem principal */}
+            {/* 2. Tabela / Gráfico / Imagem Central */}
             <div>
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Gráfico / Imagem Principal (Opcional)</h3>
-              <p className="text-xs text-slate-500 mb-3">Exibida em destaque, abaixo do enunciado — para gráficos, tabelas ou figuras grandes.</p>
+              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">2. Tabela / Gráfico / Imagem Central (Opcional)</h3>
+              <p className="text-xs text-slate-500 mb-3">Exibido em destaque centralizado exatamente no meio do enunciado — padrão exato de provas do ENEM.</p>
               <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl p-4 text-center">
                 {!imagemPrincipalPreview ? (
                   <label className="cursor-pointer flex flex-col items-center justify-center py-4">
                     <ImagePlus className="w-8 h-8 text-slate-400 mb-2" />
-                    <span className="text-xs font-bold text-slate-700">Clique para enviar o gráfico principal</span>
+                    <span className="text-xs font-bold text-slate-700">Clique para enviar a tabela ou gráfico principal</span>
                     <input type="file" accept="image/*" onChange={handleImagemPrincipalChange} className="hidden" />
                   </label>
                 ) : (
                   <div className="relative inline-block">
-                    <img src={imagemPrincipalPreview} alt="Principal" className="max-h-48 mx-auto rounded-xl border bg-white p-1 object-contain" />
+                    <img src={imagemPrincipalPreview} alt="Tabela Principal" className="max-h-48 mx-auto rounded-xl border bg-white p-2 object-contain shadow-xs" />
                     <button type="button" onClick={removerImagemPrincipal} className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1.5 shadow transition-colors cursor-pointer">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* 3. Enunciado Inferior (Texto / Comando final) */}
+            <div>
+              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1 border-b border-slate-100 pb-2">3. Enunciado (Texto Inferior / Comando Final - Opcional)</h3>
+              <p className="text-xs text-slate-500 mb-3">Insira o texto ou comando que fica <b>abaixo</b> da tabela (ex: "Utilizando os dados acima, assinale...").</p>
+              <BlocoEditor blocos={blocosEnunciadoInferior} onChange={setBlocosEnunciadoInferior} />
             </div>
 
             {/* Alternativas */}
@@ -329,7 +348,7 @@ export default function AdminNovaQuestao() {
               
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1.5">
-                  <Video className="w-4 h-4 text-brand-orange" /> Link do Vídeo de Resolução (YouTube / Embed - Opcional)
+                  <Video className="w-4 h-4 text-brand-orange" /> Link do Vídeo de Resolução (YouTube - Opcional)
                 </label>
                 <input 
                   type="text" 
@@ -361,14 +380,14 @@ export default function AdminNovaQuestao() {
 
           </form>
 
-          {/* PREVIEW AO VIVO */}
+          {/* PREVIEW AO VIVO (Estilo Prova Oficial) */}
           <div className="xl:sticky xl:top-8">
             <div className="flex items-center gap-2 mb-3 px-1">
               <Eye className="w-4 h-4 text-slate-400" />
               <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Como o aluno vai ver</h3>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
               <div className="bg-slate-50 border-b border-slate-100 px-5 py-3 flex items-center justify-between text-xs font-bold flex-wrap gap-1">
                 <span className="text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md">{materia || 'Matéria'}</span>
                 <span className="text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">{assuntoSelecionadoObj?.nome || 'Assunto / Categoria'}</span>
@@ -376,15 +395,29 @@ export default function AdminNovaQuestao() {
               </div>
 
               <div className="p-5">
-                <p className="text-slate-800 font-medium leading-relaxed mb-4 text-justify">
-                  <RenderBlocos blocos={blocosEnunciado} placeholder="O enunciado aparece aqui conforme você digita..." />
-                </p>
+                {/* 1. Texto Superior */}
+                <div className="text-slate-800 font-medium leading-relaxed mb-4 text-justify">
+                  <RenderBlocos blocos={blocosEnunciadoSuperior} placeholder="O texto superior aparece aqui..." />
+                </div>
 
+                {/* 2. Imagem / Tabela Principal Centralizada no Meio */}
                 {imagemPrincipalPreview && (
-                  <img src={imagemPrincipalPreview} alt="Gráfico" className="rounded-xl border border-slate-200 max-h-56 mx-auto mb-5 object-contain" />
+                  <div className="my-6 flex flex-col items-center justify-center">
+                    <div className="p-3 bg-white border border-slate-200 rounded-2xl shadow-xs inline-block max-w-full">
+                      <img src={imagemPrincipalPreview} alt="Tabela Principal" className="max-h-64 w-auto object-contain rounded-xl mx-auto" />
+                    </div>
+                  </div>
                 )}
 
-                <div className="space-y-2.5">
+                {/* 3. Texto Inferior / Comando Final */}
+                {blocosEnunciadoInferior.length > 0 && (
+                  <div className="text-slate-800 font-medium leading-relaxed my-4 text-justify">
+                    <RenderBlocos blocos={blocosEnunciadoInferior} />
+                  </div>
+                )}
+
+                {/* Alternativas */}
+                <div className="space-y-2.5 mt-6">
                   {LETRAS.map((letra) => (
                     <div
                       key={letra}
@@ -397,7 +430,7 @@ export default function AdminNovaQuestao() {
                       }`}>
                         {letra}
                       </div>
-                      <span className="font-medium text-sm text-slate-700">
+                      <span className="font-medium text-sm text-slate-700 flex-1">
                         <RenderBlocos blocos={alternativasBlocos[letra]} imgHeight="h-8" placeholder={`Alternativa ${letra}`} />
                       </span>
                     </div>
