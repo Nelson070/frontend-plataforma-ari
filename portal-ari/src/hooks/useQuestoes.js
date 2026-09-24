@@ -1,61 +1,62 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
-export function useQuestoes({ materia, assunto, assuntoId, dificuldade, busca, pagina = 0, porPagina = 10 } = {}) {
+export function useQuestoes({ materia, assunto, assuntoId, assuntoIds, dificuldade, busca, pagina = 0, porPagina = 10 } = {}) {
   const [questoes, setQuestoes] = useState([]);
-  const [assuntosArvore, setAssuntosArvore] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  // 1. Carrega a árvore de assuntos para o menu lateral do aluno
-  useEffect(() => {
-    async function carregarArvore() {
-      const { data, error } = await supabase
-        .from('assuntos_hierarquia')
-        .select('*')
-        .order('created_at', { ascending: true });
-
-      if (!error && data) {
-        setAssuntosArvore(data);
-      }
-    }
-    carregarArvore();
-  }, []);
 
   const carregar = useCallback(async () => {
     setLoading(true);
     setError(null);
 
-    // Descobre a turma do aluno logado para isolar o nicho corretamente
-    const { data: { user } } = await supabase.auth.getUser();
-    let turmaIdAluno = null;
+    let idsFiltro = assuntoIds || [];
 
-    if (user) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('turma_id')
-        .eq('id', user.id)
-        .single();
-      
-      if (profile) turmaIdAluno = profile.turma_id;
+    // Se o aluno clicou em um assunto/categoria específica na árvore,
+    // vamos buscar esse ID e todos os filhos/subcategorias abaixo dele recursivamente!
+    if (assuntoId) {
+      try {
+        const { data: todosAssuntos } = await supabase
+          .from('assuntos_hierarquia')
+          .select('id, categoria_pai_id');
+
+        if (todosAssuntos) {
+          const idsColetados = [assuntoId];
+          let fila = [assuntoId];
+
+          // Varre a árvore para pegar todos os descendentes (filhos, netos, etc.)
+          while (fila.length > 0) {
+            const atualId = fila.shift();
+            const filhos = todosAssuntos.filter(a => a.categoria_pai_id === atualId);
+            for (const filho of filhos) {
+              if (!idsColetados.includes(filho.id)) {
+                idsColetados.push(filho.id);
+                fila.push(filho.id);
+              }
+            }
+          }
+          idsFiltro = idsColetados;
+        }
+      } catch (err) {
+        console.error('Erro ao mapear hierarquia de assuntos:', err);
+        idsFiltro = [assuntoId];
+      }
     }
 
-    // Traz a questão filtrando estritamente pela turma do aluno
     let query = supabase
       .from('questoes')
-      .select('*, assuntos_hierarquia(*)', { count: 'exact' })
+      .select('*', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(pagina * porPagina, pagina * porPagina + porPagina - 1);
 
-    // Aplica o isolamento por nicho/turma se o aluno estiver logado e vinculado a uma turma
-    if (turmaIdAluno) {
-      query = query.eq('turma_id', turmaIdAluno);
-    }
-
     if (materia) query = query.eq('materia', materia);
-    if (assuntoId) query = query.eq('assunto_id', assuntoId);
-    else if (assunto) query = query.eq('assunto', assunto);
+    if (assunto) query = query.eq('assunto', assunto);
+    
+    // Aplica o filtro usando a lista completa de IDs (incluindo os filhos da pasta)
+    if (idsFiltro.length > 0) {
+      query = query.in('assunto_id', idsFiltro);
+    }
     
     if (dificuldade) query = query.eq('dificuldade', dificuldade);
     if (busca) query = query.ilike('enunciado', `%${busca}%`);
@@ -65,11 +66,11 @@ export function useQuestoes({ materia, assunto, assuntoId, dificuldade, busca, p
     if (error) {
       setError(error);
     } else {
-      setQuestoes(data || []);
+      setQuestoes(data);
       setTotal(count ?? 0);
     }
     setLoading(false);
-  }, [materia, assunto, assuntoId, dificuldade, busca, pagina, porPagina]);
+  }, [materia, assunto, assuntoId, JSON.stringify(assuntoIds), dificuldade, busca, pagina, porPagina]);
 
   useEffect(() => {
     carregar();
@@ -79,7 +80,7 @@ export function useQuestoes({ materia, assunto, assuntoId, dificuldade, busca, p
     return responderQuestaoAvulsa(questaoId, alternativaEscolhida, respostaCorreta);
   }
 
-  return { questoes, assuntosArvore, total, loading, error, recarregar: carregar, responder };
+  return { questoes, total, loading, error, recarregar: carregar, responder };
 }
 
 export async function responderQuestaoAvulsa(questaoId, alternativaEscolhida, respostaCorreta) {
@@ -103,9 +104,9 @@ export function useAssuntosDisponiveis() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.from('assuntos_hierarquia').select('nome').then(({ data, error }) => {
+    supabase.from('questoes').select('assunto').then(({ data, error }) => {
       if (!error && data) {
-        const unicos = [...new Set(data.map((q) => q.nome))].sort();
+        const unicos = [...new Set(data.map((q) => q.assunto))].sort();
         setAssuntos(unicos);
       }
       setLoading(false);
@@ -115,28 +116,9 @@ export function useAssuntosDisponiveis() {
   return { assuntos, loading };
 }
 
-export async function buscarQuestoesParaSimulado({ assuntoId, dificuldade, quantidade }) {
-  // Descobre a turma do aluno logado para isolar também na geração de simulados
-  const { data: { user } } = await supabase.auth.getUser();
-  let turmaIdAluno = null;
-
-  if (user) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('turma_id')
-      .eq('id', user.id)
-      .single();
-    
-    if (profile) turmaIdAluno = profile.turma_id;
-  }
-
+export async function buscarQuestoesParaSimulado({ assunto, dificuldade, quantidade }) {
   let query = supabase.from('questoes').select('id, dificuldade');
-
-  if (turmaIdAluno) {
-    query = query.eq('turma_id', turmaIdAluno);
-  }
-
-  if (assuntoId) query = query.eq('assunto_id', assuntoId);
+  if (assunto) query = query.eq('assunto', assunto);
   if (dificuldade && dificuldade !== 'misto') query = query.eq('dificuldade', dificuldade);
 
   const { data, error } = await query;

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Award, Flame, PlayCircle as PlayIcon, FileText, Target, TrendingUp, Calendar, Loader2 } from 'lucide-react';
+import { ChevronRight, Award, Flame, PlayCircle as PlayIcon, FileText, Target, TrendingUp, Calendar, Loader2, CheckCircle2, XCircle, GraduationCap } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Sidebar from './Sidebar';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../hooks/useAuth';
 import { useGamificacao } from '../hooks/useGamificacao';
+import { useDesempenho } from '../hooks/useDesempenho';
 
 const QUICK_ACCESS = [
   { to: '/banco-questoes', icon: FileText, title: 'Banco de Questões', description: 'Questões focadas na sua área.', cta: 'Acessar' },
@@ -14,25 +15,30 @@ const QUICK_ACCESS = [
   { to: '/plano-estudos', icon: Calendar, title: 'Plano de Estudos', description: 'Organize sua rotina com o cronograma da turma.', cta: 'Organizar' },
 ];
 
+const CORES_BARRA = ['bg-emerald-500', 'bg-brand-orange', 'bg-amber-500', 'bg-red-500', 'bg-blue-500'];
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const { profile } = useAuth();
 
   const [loadingUltimaAula, setLoadingUltimaAula] = useState(true);
-  const [ultimaAula, setUltimaAula] = useState(null); // { titulo, modulo_nome, progresso, aula_id }
+  const [ultimaAula, setUltimaAula] = useState(null);
+
+  const [loadingCurso, setLoadingCurso] = useState(true);
+  const [progressoCurso, setProgressoCurso] = useState({ concluidas: 0, total: 0 });
 
   const { streak, diasEstudadosSemana, metaSemanalDias } = useGamificacao(
     profile?.turma_id,
     profile?.turmas?.meta_semanal_dias ?? 5
   );
 
+  const { resumo, porAssunto, loading: loadingDesempenho } = useDesempenho();
+
   useEffect(() => {
     async function carregarUltimaAula() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // A aula mais recentemente mexida pelo aluno — não importa se já
-      // concluiu outras antes, essa é a que aparece como "continue de onde parou".
       const { data, error } = await supabase
         .from('progresso_aulas')
         .select('progresso, concluida, atualizado_em, aulas ( titulo, modulo_nome )')
@@ -53,10 +59,31 @@ export default function Dashboard() {
     carregarUltimaAula();
   }, []);
 
+  // % de conclusão do curso — total de aulas da turma vs. quantas o aluno já concluiu.
+  useEffect(() => {
+    async function carregarProgressoCurso() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !profile?.turma_id) { setLoadingCurso(false); return; }
+
+      const [{ count: totalAulas }, { data: concluidas }] = await Promise.all([
+        supabase.from('aulas').select('id', { count: 'exact', head: true }).eq('turma_id', profile.turma_id),
+        supabase.from('progresso_aulas').select('id').eq('user_id', user.id).eq('concluida', true),
+      ]);
+
+      setProgressoCurso({ concluidas: concluidas?.length ?? 0, total: totalAulas ?? 0 });
+      setLoadingCurso(false);
+    }
+    carregarProgressoCurso();
+  }, [profile?.turma_id]);
+
   const nome = profile?.nome || 'Concurseiro(a)';
   const primeiroNome = nome.split(' ')[0];
   const inicial = nome.charAt(0).toUpperCase();
   const turmaNome = profile?.turmas?.nome || '—';
+
+  const percentualCurso = progressoCurso.total > 0
+    ? Math.round((progressoCurso.concluidas / progressoCurso.total) * 100)
+    : 0;
 
   const fadeUp = {
     hidden: { opacity: 0, y: 16 },
@@ -67,6 +94,13 @@ export default function Dashboard() {
     hidden: { opacity: 0 },
     visible: { opacity: 1, transition: { staggerChildren: 0.06 } },
   };
+
+  const KPIS = [
+    { icon: GraduationCap, iconStyle: 'bg-blue-50 text-blue-500', label: 'Curso Concluído', value: loadingCurso ? '—' : `${percentualCurso}%` },
+    { icon: TrendingUp, iconStyle: 'bg-brand-orange text-white', label: 'Taxa de Acerto', value: loadingDesempenho ? '—' : `${resumo.taxaAcerto}%` },
+    { icon: CheckCircle2, iconStyle: 'bg-emerald-50 text-emerald-500', label: 'Acertos', value: loadingDesempenho ? '—' : resumo.acertos },
+    { icon: XCircle, iconStyle: 'bg-red-50 text-red-500', label: 'Erros', value: loadingDesempenho ? '—' : resumo.erros },
+  ];
 
   return (
     <div className="flex h-screen bg-[#f3f4f6] font-sans overflow-hidden">
@@ -151,6 +185,74 @@ export default function Dashboard() {
                 </p>
               </div>
             </motion.div>
+
+            {/* ESTATÍSTICAS REAIS */}
+            <motion.div variants={fadeUp} className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {KPIS.map(({ icon: Icon, iconStyle, label, value }) => (
+                <div key={label} className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${iconStyle}`}>
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide truncate">{label}</p>
+                    <h3 className="text-lg font-black text-slate-900">{value}</h3>
+                  </div>
+                </div>
+              ))}
+            </motion.div>
+
+            {/* Barra de progresso do curso, em destaque */}
+            {!loadingCurso && progressoCurso.total > 0 && (
+              <motion.div variants={fadeUp} className="bg-white border border-slate-200 rounded-2xl p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-bold text-slate-700">Progresso do Curso</h3>
+                  <span className="text-xs font-bold text-slate-500">
+                    {progressoCurso.concluidas} de {progressoCurso.total} aulas concluídas
+                  </span>
+                </div>
+                <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-brand-orange rounded-full transition-all duration-700"
+                    style={{ width: `${percentualCurso}%` }}
+                  />
+                </div>
+              </motion.div>
+            )}
+
+            {/* Desempenho por assunto */}
+            {!loadingDesempenho && porAssunto.length > 0 && (
+              <motion.div variants={fadeUp} className="bg-white border border-slate-200 rounded-2xl p-5">
+                <h3 className="text-sm font-bold text-slate-700 mb-4">Desempenho por Assunto</h3>
+                <div className="space-y-3.5">
+                  {porAssunto.slice(0, 5).map((item, i) => (
+                    <div key={item.assunto}>
+                      <div className="flex justify-between items-end mb-1">
+                        <span className="text-xs font-bold text-slate-600">{item.assunto}</span>
+                        <span className="text-xs font-black text-slate-900">{item.acertos}%</span>
+                      </div>
+                      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ${CORES_BARRA[i % CORES_BARRA.length]}`}
+                          style={{ width: `${item.acertos}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={() => navigate('/desempenho')}
+                  className="mt-4 flex items-center text-brand-orange font-bold text-xs hover:underline"
+                >
+                  Ver desempenho completo <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
+                </button>
+              </motion.div>
+            )}
+
+            {!loadingDesempenho && resumo.totalRespondidas === 0 && (
+              <motion.div variants={fadeUp} className="bg-white border border-slate-200 rounded-2xl p-5 text-sm text-slate-500 font-medium text-center">
+                Responda algumas questões no Banco de Questões pra suas estatísticas aparecerem aqui.
+              </motion.div>
+            )}
 
             <motion.div variants={fadeUp}>
               <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 px-1">Atalhos</h3>

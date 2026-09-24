@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Target, BookOpen, Settings2, PlayCircle, Clock,
-  ChevronLeft, ChevronRight, CheckCircle2, LayoutGrid, ArrowLeft, Loader2, Eye, MessageSquare, Check, XCircle, EyeOff
+  ChevronLeft, ChevronRight, CheckCircle2, LayoutGrid, ArrowLeft, Loader2, Eye, MessageSquare, Check, XCircle, EyeOff, Folder, ChevronDown
 } from 'lucide-react';
 import Sidebar from './Sidebar';
 import { useAuth } from '../hooks/useAuth';
@@ -10,8 +10,8 @@ import {
   useSimulados, buscarQuestoesDoSimulado, criarSimuladoAluno,
   iniciarTentativa, finalizarTentativa,
 } from '../hooks/useSimulados';
-import { useAssuntosDisponiveis, buscarQuestoesParaSimulado, responderQuestaoAvulsa } from '../hooks/useQuestoes';
-import RenderBlocos from '../components/RenderBlocos';
+import { buscarQuestoesParaSimulado, responderQuestaoAvulsa } from '../hooks/useQuestoes';import RenderBlocos from '../components/RenderBlocos';
+import { supabase } from '../lib/supabaseClient';
 
 export default function Simulados() {
   const navigate = useNavigate();
@@ -19,13 +19,51 @@ export default function Simulados() {
 
   const [modoResolucao, setModoResolucao] = useState(false);
   const [tipoSelecionado, setTipoSelecionado] = useState('oficial');
-  const [assuntoSelecionado, setAssuntoSelecionado] = useState('');
+  
+  // 👈 Novos estados para a árvore hierárquica na aba "Por Assunto"
+  const [assuntosArvore, setAssuntosArvore] = useState([]);
+  const [assuntoIdSelecionado, setAssuntoIdSelecionado] = useState('');
+  const [assuntoNomeSelecionado, setAssuntoNomeSelecionado] = useState('');
+  const [categoriasAbertas, setCategoriasAbertas] = useState({});
+  const [loadingAssuntosArvore, setLoadingAssuntosArvore] = useState(false);
+
   const [quantidadePersonalizada, setQuantidadePersonalizada] = useState(15);
   const [dificuldadePersonalizada, setDificuldadePersonalizada] = useState('misto');
   const [gerando, setGerando] = useState(false);
 
   const { simulados: simuladosOficiais, loading: loadingOficiais } = useSimulados({ tipo: 'oficial' });
-  const { assuntos, loading: loadingAssuntos } = useAssuntosDisponiveis();
+
+  // Busca a árvore de assuntos da turma do aluno para a aba "Por Assunto"
+  useEffect(() => {
+    async function carregarArvoreTurma() {
+      if (!profile?.turma_id) return;
+      setLoadingAssuntosArvore(true);
+      try {
+        const { data: arvore, error } = await supabase
+          .from('assuntos_hierarquia')
+          .select('*')
+          .eq('turma_id', profile.turma_id)
+          .order('created_at', { ascending: true });
+
+        if (!error && arvore) {
+          setAssuntosArvore(arvore);
+          // Abre os nós principais por padrão
+          const idsIniciais = {};
+          arvore.filter(a => !a.categoria_pai_id).forEach(p => { idsIniciais[p.id] = true; });
+          setCategoriasAbertas(idsIniciais);
+        }
+      } catch (err) {
+        console.error('Erro ao carregar árvore de assuntos:', err);
+      } finally {
+        setLoadingAssuntosArvore(false);
+      }
+    }
+    carregarArvoreTurma();
+  }, [profile]);
+
+  const toggleCategoria = (id) => {
+    setCategoriasAbertas(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
   const [simuladoAtivo, setSimuladoAtivo] = useState(null); 
   const [tentativaId, setTentativaId] = useState(null);
@@ -38,8 +76,6 @@ export default function Simulados() {
   const [resultado, setResultado] = useState(null); 
   const [segundosRestantes, setSegundosRestantes] = useState(0);
   const [visualizandoGabarito, setVisualizandoGabarito] = useState(false); 
-  
-  // 👈 Novo estado: controla se o gabarito/comentário está revelado por demanda nesta questão
   const [gabaritoReveladoNaQuestao, setGabaritoReveladoNaQuestao] = useState(false);
 
   const handleVoltar = () => navigate('/dashboard');
@@ -90,35 +126,44 @@ export default function Simulados() {
 
   const iniciarOficial = (simulado) => abrirProva(simulado);
 
-  const iniciarPorAssunto = async () => {
-    if (!assuntoSelecionado) return;
+  const iniciarPorAssuntoHierarquico = async () => {
+    if (!assuntoIdSelecionado) return;
     setGerando(true);
 
-    const { questaoIds, error: erroBusca } = await buscarQuestoesParaSimulado({
-      assunto: assuntoSelecionado,
-      quantidade: 15,
-    });
+    try {
+      // Busca questões vinculadas ao assunto_id selecionado na árvore
+      let query = supabase.from('questoes').select('id').eq('assunto_id', assuntoIdSelecionado);
+      if (profile?.turma_id) {
+        query = query.eq('turma_id', profile.turma_id);
+      }
+      const { data: questoesData, error: erroBusca } = await query;
 
-    if (erroBusca || questaoIds.length === 0) {
-      alert('Não encontramos questões suficientes desse assunto ainda.');
+      if (erroBusca || !questoesData || questoesData.length === 0) {
+        alert('Não encontramos questões cadastradas para este assunto específico ainda.');
+        setGerando(false);
+        return;
+      }
+
+      const questaoIds = questoesData.map(q => q.id);
+
+      const { simulado, error } = await criarSimuladoAluno({
+        titulo: `Treino: ${assuntoNomeSelecionado}`,
+        turmaId: profile.turma_id,
+        tipo: 'assunto',
+        tempoMinutos: Math.max(15, questaoIds.length * 3),
+        questaoIds,
+      });
+
       setGerando(false);
-      return;
+      if (error) {
+        alert('Erro ao gerar o simulado. Tente novamente.');
+        return;
+      }
+      abrirProva(simulado);
+    } catch (err) {
+      console.error('Erro ao iniciar treino por assunto:', err);
+      setGerando(false);
     }
-
-    const { simulado, error } = await criarSimuladoAluno({
-      titulo: `Treino: ${assuntoSelecionado}`,
-      turmaId: profile.turma_id,
-      tipo: 'assunto',
-      tempoMinutos: 30,
-      questaoIds,
-    });
-
-    setGerando(false);
-    if (error) {
-      alert('Erro ao gerar o simulado. Tente novamente.');
-      return;
-    }
-    abrirProva(simulado);
   };
 
   const iniciarPersonalizado = async () => {
@@ -191,15 +236,18 @@ export default function Simulados() {
 
   const mudarQuestao = (novaIndex) => {
     setQuestaoAtual(novaIndex);
-    setGabaritoReveladoNaQuestao(false); // Reseta a revelação ao trocar de questão
+    setGabaritoReveladoNaQuestao(false);
   };
 
+  const principais = assuntosArvore.filter(a => !a.categoria_pai_id);
+  const getSub = (paiId) => assuntosArvore.filter(a => a.categoria_pai_id === paiId);
+
   // ==========================================
-  // TELA 2: MODO DE RESOLUÇÃO OU GABARITO PÓS-PROVA
+  // MODO DE RESOLUÇÃO OU GABARITO PÓS-PROVA
   // ==========================================
   if (modoResolucao) {
     const questao = questoesProva[questaoAtual];
-    const respostaAluno = respostas[questao.id];
+    const respostaAluno = respostas[questao?.id];
 
     return (
       <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
@@ -300,7 +348,6 @@ export default function Simulados() {
                       <div className="flex items-center gap-3">
                         <span className="text-sm font-bold text-slate-400">Questão {questaoAtual + 1}</span>
                         
-                        {/* BOTÃO DEDICADO "VER GABARITO" SOB DEMANDA (SÓ APARECE APÓS FINALIZAR) */}
                         {resultado && (
                           <button
                             onClick={() => setGabaritoReveladoNaQuestao(!gabaritoReveladoNaQuestao)}
@@ -332,14 +379,13 @@ export default function Simulados() {
 
                       {/* ALTERNATIVAS */}
                       <div className="space-y-2.5">
-                        {questao.alternativas.map((alt) => {
+                        {questao.alternativas?.map((alt) => {
                           const isMarcada = respostaAluno === alt.letra;
                           const isCorreta = alt.letra === questao.resposta_correta;
 
                           let estilosBota_o = 'border-slate-200 bg-white hover:border-brand-orange/40 text-slate-700';
                           let estilosCirculo = 'bg-slate-100 text-slate-600';
 
-                          // O gabarito só colore as alternativas se a prova estiver finalizada E o aluno clicar em "Ver Gabarito" nesta questão
                           if (resultado && gabaritoReveladoNaQuestao) {
                             if (isCorreta) {
                               estilosBota_o = 'border-emerald-500 bg-emerald-50/80 text-slate-900';
@@ -384,7 +430,7 @@ export default function Simulados() {
                         })}
                       </div>
 
-                      {/* COMENTÁRIO DO PROFESSOR (APARECE SOB DEMANDA JUNTO COM O GABARITO) */}
+                      {/* COMENTÁRIO DO PROFESSOR */}
                       {resultado && gabaritoReveladoNaQuestao && questao.comentario && (
                         <div className="mt-6 p-5 bg-orange-50/70 border border-orange-200 rounded-2xl animate-fade-in">
                           <div className="flex items-center gap-2 mb-2">
@@ -504,7 +550,7 @@ export default function Simulados() {
   }
 
   // ==========================================
-  // TELA 1: HUB DE CONFIGURAÇÃO DO SIMULADO
+  // HUB DE CONFIGURAÇÃO DO SIMULADO (TELA 1)
   // ==========================================
   return (
     <div className="flex h-screen bg-[#f3f4f6] font-sans overflow-hidden">
@@ -547,7 +593,7 @@ export default function Simulados() {
                 <BookOpen className="w-5 h-5" />
               </div>
               <h3 className="text-base font-black text-slate-900 mb-1.5">Por Assunto</h3>
-              <p className="text-xs text-slate-500 font-medium leading-relaxed">Foque nos seus pontos fracos com um conteúdo específico.</p>
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">Foque nos seus pontos fracos por Módulos e Tópicos.</p>
             </button>
 
             <button
@@ -600,40 +646,120 @@ export default function Simulados() {
               </div>
             )}
 
+            {/* ABA "POR ASSUNTO" COM A ÁRVORE HIERÁRQUICA MULTINÍVEL */}
             {tipoSelecionado === 'assunto' && (
               <div>
-                <h2 className="text-lg font-black text-slate-900 mb-5">Selecione o Assunto</h2>
-                {loadingAssuntos ? (
+                <h2 className="text-lg font-black text-slate-900 mb-2">Selecione o Módulo / Assunto</h2>
+                <p className="text-xs text-slate-500 mb-5">Navegue pela árvore de conteúdos da sua turma para focar seu treino.</p>
+
+                {loadingAssuntosArvore ? (
                   <div className="flex items-center justify-center py-10 text-slate-400 gap-2">
-                    <Loader2 className="w-5 h-5 animate-spin" /> Carregando assuntos...
+                    <Loader2 className="w-5 h-5 animate-spin" /> Carregando árvore de assuntos...
                   </div>
-                ) : assuntos.length === 0 ? (
+                ) : assuntosArvore.length === 0 ? (
                   <p className="text-sm text-slate-400 font-medium text-center py-10">
-                    Ainda não há questões cadastradas pra gerar um treino por assunto.
+                    Nenhum assunto cadastrado na árvore da sua turma ainda.
                   </p>
                 ) : (
-                  <>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                      {assuntos.map((a) => (
-                        <button
-                          key={a}
-                          onClick={() => setAssuntoSelecionado(a)}
-                          className={`p-3.5 border rounded-xl text-center font-bold text-sm transition-colors cursor-pointer ${assuntoSelecionado === a ? 'bg-brand-orange text-white border-brand-orange shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-brand-orange/40'}`}
-                        >
-                          {a}
-                        </button>
-                      ))}
-                    </div>
-                    <button
-                      onClick={iniciarPorAssunto}
-                      disabled={!assuntoSelecionado || gerando}
-                      className="flex items-center justify-center gap-2 w-full md:w-auto px-6 py-3 bg-brand-orange disabled:bg-slate-300 hover:bg-orange-600 text-white font-bold text-sm rounded-xl transition-colors cursor-pointer"
-                    >
-                      {gerando ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlayCircle className="w-5 h-5" />}
-                      Iniciar Treino
-                    </button>
-                  </>
+                  <div className="space-y-2 max-h-96 overflow-y-auto pr-2 mb-6 border border-slate-100 rounded-xl p-3 bg-slate-50">
+                    {principais.map((pai) => {
+                      const subitensNivel1 = getSub(pai.id);
+                      const isOpenPai = categoriasAbertas[pai.id];
+                      const isPaiSelecionado = assuntoIdSelecionado === pai.id;
+
+                      return (
+                        <div key={pai.id} className="space-y-1">
+                          <div className={`flex items-center justify-between px-3 py-2 rounded-xl transition-colors border ${
+                            isPaiSelecionado ? 'bg-orange-50 border-orange-200 text-brand-orange font-bold' : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                          }`}>
+                            <button
+                              onClick={() => { setAssuntoIdSelecionado(pai.id); setAssuntoNomeSelecionado(pai.nome); }}
+                              className="flex items-center gap-2 text-xs font-bold flex-1 text-left cursor-pointer uppercase truncate"
+                            >
+                              <Folder className="w-4 h-4 text-brand-orange shrink-0" />
+                              <span className="truncate">{pai.nome}</span>
+                            </button>
+
+                            {subitensNivel1.length > 0 && (
+                              <button
+                                onClick={() => toggleCategoria(pai.id)}
+                                className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+                              >
+                                {isOpenPai ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Subitens Nível 1 */}
+                          {isOpenPai && subitensNivel1.length > 0 && (
+                            <div className="pl-4 space-y-1.5 border-l-2 border-slate-200 ml-3 my-1">
+                              {subitensNivel1.map((sub1) => {
+                                const subitensNivel2 = getSub(sub1.id);
+                                const isOpenSub1 = categoriasAbertas[sub1.id];
+                                const isSub1Selecionado = assuntoIdSelecionado === sub1.id;
+
+                                return (
+                                  <div key={sub1.id} className="space-y-1">
+                                    <div className={`flex items-center justify-between px-3 py-1.5 rounded-lg transition-colors border ${
+                                      isSub1Selecionado ? 'bg-orange-50 border-orange-200 text-brand-orange font-bold' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                                    }`}>
+                                      <button
+                                        onClick={() => { setAssuntoIdSelecionado(sub1.id); setAssuntoNomeSelecionado(sub1.nome); }}
+                                        className="flex items-center gap-1.5 text-xs flex-1 text-left cursor-pointer truncate font-semibold"
+                                      >
+                                        <span>📂</span>
+                                        <span className="truncate">{sub1.nome}</span>
+                                      </button>
+
+                                      {subitensNivel2.length > 0 && (
+                                        <button
+                                          onClick={() => toggleCategoria(sub1.id)}
+                                          className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                                        >
+                                          {isOpenSub1 ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {/* Subitens Nível 2 / Folhas Finais */}
+                                    {isOpenSub1 && subitensNivel2.length > 0 && (
+                                      <div className="pl-4 space-y-1 border-l border-slate-200 ml-2 my-1">
+                                        {subitensNivel2.map((sub2) => {
+                                          const isSub2Selecionado = assuntoIdSelecionado === sub2.id;
+                                          return (
+                                            <button
+                                              key={sub2.id}
+                                              onClick={() => { setAssuntoIdSelecionado(sub2.id); setAssuntoNomeSelecionado(sub2.nome); }}
+                                              className={`w-full text-left px-3 py-1.5 rounded-lg text-xs transition-colors cursor-pointer truncate flex items-center gap-2 border ${
+                                                isSub2Selecionado ? 'bg-orange-50 border-orange-200 text-brand-orange font-bold' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                                              }`}
+                                            >
+                                              <span>📄</span>
+                                              <span className="truncate">{sub2.nome}</span>
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
+
+                <button
+                  onClick={iniciarPorAssuntoHierarquico}
+                  disabled={!assuntoIdSelecionado || gerando}
+                  className="flex items-center justify-center gap-2 w-full md:w-auto px-6 py-3 bg-brand-orange disabled:bg-slate-300 hover:bg-orange-600 text-white font-bold text-sm rounded-xl transition-colors cursor-pointer shadow-md"
+                >
+                  {gerando ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlayCircle className="w-5 h-5" />}
+                  {assuntoNomeSelecionado ? `Iniciar Treino: ${assuntoNomeSelecionado}` : 'Selecione um assunto acima'}
+                </button>
               </div>
             )}
 
@@ -677,7 +803,7 @@ export default function Simulados() {
                 <button
                   onClick={iniciarPersonalizado}
                   disabled={gerando}
-                  className="flex items-center justify-center gap-2 w-full md:w-auto px-6 py-3 bg-brand-orange hover:bg-orange-600 text-white font-bold text-sm rounded-xl transition-colors disabled:opacity-70 cursor-pointer"
+                  className="flex items-center justify-center gap-2 w-full md:w-auto px-6 py-3 bg-brand-orange hover:bg-orange-600 text-white font-bold text-sm rounded-xl transition-colors disabled:opacity-70 cursor-pointer shadow-md"
                 >
                   {gerando ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlayCircle className="w-5 h-5" />}
                   Gerar Simulado

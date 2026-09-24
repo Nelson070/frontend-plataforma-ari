@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { FolderTree, Plus, Trash2, ArrowLeft, Loader2, Folder, FolderOpen, ChevronRight, ChevronDown, BookOpen } from 'lucide-react';
+import { FolderTree, Plus, Trash2, ArrowLeft, Loader2, Folder, FolderOpen, ChevronRight, ChevronDown, BookOpen, FileText } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import AdminSidebar from './AdminSidebar';
 
@@ -11,7 +11,7 @@ export default function AdminAssuntos() {
   const [loading, setLoading] = useState(false);
   const [salvando, setSalvando] = useState(false);
   
-  // Controle de pastas expandidas na árvore (armazena IDs abertos)
+  // Controle de pastas expandidas na árvore
   const [expandidos, setExpandidos] = useState({});
 
   // Formulário de novo assunto
@@ -43,7 +43,6 @@ export default function AdminAssuntos() {
     
     if (!error && data) {
       setAssuntos(data);
-      // Deixa todas as categorias principais expandidas por padrão
       const mapExp = {};
       data.filter(a => !a.categoria_pai_id).forEach(p => { mapExp[p.id] = true; });
       setExpandidos(mapExp);
@@ -93,7 +92,7 @@ export default function AdminAssuntos() {
     }
   };
 
-  // Separa principais e subcategorias
+  // Mapeamento correto dos 3 Níveis
   const principais = assuntos.filter(a => !a.categoria_pai_id);
   const getSub = (paiId) => assuntos.filter(a => a.categoria_pai_id === paiId);
 
@@ -112,7 +111,7 @@ export default function AdminAssuntos() {
               <h2 className="text-lg font-black text-slate-900 leading-tight flex items-center gap-2">
                 <FolderTree className="w-5 h-5 text-brand-orange" /> Gerenciar Árvore de Assuntos
               </h2>
-              <p className="text-xs font-medium text-slate-500">Organize disciplinas principais e subcategorias em formato de árvore.</p>
+              <p className="text-xs font-medium text-slate-500">Organize Módulos, Subtópicos e Tópicos Finais em 3 níveis.</p>
             </div>
           </div>
 
@@ -137,30 +136,37 @@ export default function AdminAssuntos() {
             {/* FORMULÁRIO DE CADASTRO */}
             <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
               <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                <Plus className="w-4 h-4 text-brand-orange" /> Adicionar Novo Assunto ou Subcategoria
+                <Plus className="w-4 h-4 text-brand-orange" /> Adicionar Módulo, Subtópico ou Tópico
               </h3>
 
-              <form onSubmit={handleSalvar} className="grid grid-cols-1 md:grid-cols-[1fr_240px_auto] gap-3 items-end pt-2 border-t border-slate-100">
+              <form onSubmit={handleSalvar} className="grid grid-cols-1 md:grid-cols-[1fr_280px_auto] gap-3 items-end pt-2 border-t border-slate-100">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome do Assunto</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome do Item</label>
                   <input 
                     type="text" 
                     required 
                     value={nome} 
                     onChange={(e) => setNome(e.target.value)} 
-                    placeholder="Ex: Geometria Plana ou Ângulos..." 
+                    placeholder="Ex: Módulo 1, Geometria Plana, Ângulos..." 
                     className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-brand-orange" 
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Categoria Pai (Opcional)</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Pertence a (Pai)</label>
                   <select 
                     value={categoriaPaiId} 
                     onChange={(e) => setCategoriaPaiId(e.target.value)} 
-                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none text-slate-700"
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none text-slate-700 truncate"
                   >
-                    <option value="">(É uma Categoria Principal)</option>
-                    {principais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                    <option value="">📁 Módulo Principal (Nível 1)</option>
+                    {principais.map(pai => (
+                      <React.Fragment key={pai.id}>
+                        <option value={pai.id} className="font-bold">📁 ➔ {pai.nome} (Nível 2)</option>
+                        {getSub(pai.id).map(sub1 => (
+                          <option key={sub1.id} value={sub1.id}>&nbsp;&nbsp;&nbsp;&nbsp;📄 ➔ {pai.nome} / {sub1.nome} (Nível 3)</option>
+                        ))}
+                      </React.Fragment>
+                    ))}
                   </select>
                 </div>
                 <button 
@@ -173,7 +179,7 @@ export default function AdminAssuntos() {
               </form>
             </div>
 
-            {/* LISTAGEM DA ÁRVORE EXPANSÍVEL */}
+            {/* LISTAGEM DA ÁRVORE EM 3 NÍVEIS */}
             <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
@@ -191,22 +197,22 @@ export default function AdminAssuntos() {
               ) : (
                 <div className="space-y-3">
                   {principais.map(pai => {
-                    const subitens = getSub(pai.id);
-                    const estaExpandido = expandidos[pai.id];
+                    const subitensNivel1 = getSub(pai.id);
+                    const estaExpandidoPai = expandidos[pai.id];
 
                     return (
                       <div key={pai.id} className="border border-slate-200 rounded-2xl bg-slate-50/50 overflow-hidden transition-all">
-                        {/* CATEGORIA PRINCIPAL (PASTA) */}
+                        {/* NÍVEL 1: MÓDULO PRINCIPAL */}
                         <div className="p-4 flex items-center justify-between bg-white border-b border-slate-100">
                           <div className="flex items-center gap-3 cursor-pointer select-none flex-1" onClick={() => toggleExpand(pai.id)}>
                             <button className="text-slate-400 hover:text-slate-600">
-                              {estaExpandido ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                              {estaExpandidoPai ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                             </button>
-                            <div className="flex items-center gap-2 font-black text-slate-900 text-sm">
-                              {estaExpandido ? <FolderOpen className="w-4 h-4 text-brand-orange" /> : <Folder className="w-4 h-4 text-brand-orange" />}
+                            <div className="flex items-center gap-2 font-black text-slate-900 text-sm uppercase">
+                              {estaExpandidoPai ? <FolderOpen className="w-4 h-4 text-brand-orange" /> : <Folder className="w-4 h-4 text-brand-orange" />}
                               {pai.nome}
                               <span className="ml-2 px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[10px] font-bold">
-                                {subitens.length} subitens
+                                {subitensNivel1.length} subtópicos
                               </span>
                             </div>
                           </div>
@@ -214,30 +220,63 @@ export default function AdminAssuntos() {
                           <button 
                             onClick={() => handleDeletar(pai.id, pai.nome)} 
                             className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors cursor-pointer"
-                            title="Excluir Categoria"
+                            title="Excluir Módulo"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
 
-                        {/* SUBCATEGORIAS */}
-                        {estaExpandido && subitens.length > 0 && (
-                          <div className="p-3 pl-10 space-y-2 bg-slate-50/80">
-                            {subitens.map(sub => (
-                              <div key={sub.id} className="flex items-center justify-between text-sm bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
-                                <span className="font-bold text-slate-700 flex items-center gap-2.5">
-                                  <span className="w-2 h-2 rounded-full bg-brand-orange"></span>
-                                  {sub.nome}
-                                </span>
-                                <button 
-                                  onClick={() => handleDeletar(sub.id, sub.nome)} 
-                                  className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer"
-                                  title="Excluir Subcategoria"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            ))}
+                        {/* NÍVEL 2: SUBTÓPICOS */}
+                        {estaExpandidoPai && subitensNivel1.length > 0 && (
+                          <div className="p-3 pl-6 space-y-2 bg-slate-50/80">
+                            {subitensNivel1.map(sub1 => {
+                              const subitensNivel2 = getSub(sub1.id);
+                              const estaExpandidoSub1 = expandidos[sub1.id];
+
+                              return (
+                                <div key={sub1.id} className="border border-slate-200/80 rounded-xl bg-white overflow-hidden shadow-2xs">
+                                  <div className="p-3 flex items-center justify-between">
+                                    <div className="flex items-center gap-2.5 cursor-pointer select-none flex-1" onClick={() => toggleExpand(sub1.id)}>
+                                      <button className="text-slate-400 hover:text-slate-600">
+                                        {subitensNivel2.length > 0 ? (estaExpandidoSub1 ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />) : <span className="w-3.5 inline-block"></span>}
+                                      </button>
+                                      <span className="font-bold text-slate-700 text-xs flex items-center gap-1.5 uppercase">
+                                        📂 {sub1.nome}
+                                      </span>
+                                    </div>
+
+                                    <button 
+                                      onClick={() => handleDeletar(sub1.id, sub1.nome)} 
+                                      className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer"
+                                      title="Excluir Subtópico"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+
+                                  {/* NÍVEL 3: TÓPICOS FINAIS */}
+                                  {estaExpandidoSub1 && subitensNivel2.length > 0 && (
+                                    <div className="p-2 pl-6 space-y-1.5 bg-slate-50/50 border-t border-slate-100">
+                                      {subitensNivel2.map(sub2 => (
+                                        <div key={sub2.id} className="flex items-center justify-between text-xs bg-white p-2.5 rounded-lg border border-slate-200/60 shadow-2xs">
+                                          <span className="font-medium text-slate-600 flex items-center gap-2">
+                                            <FileText className="w-3.5 h-3.5 text-brand-orange" />
+                                            {sub2.nome}
+                                          </span>
+                                          <button 
+                                            onClick={() => handleDeletar(sub2.id, sub2.nome)} 
+                                            className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-1 rounded-lg transition-colors cursor-pointer"
+                                            title="Excluir Tópico Final"
+                                          >
+                                            <Trash2 className="w-3 h-3" />
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
                       </div>

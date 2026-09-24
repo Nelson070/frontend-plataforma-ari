@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Search, Filter, BookOpen, ChevronDown, ChevronRight as ChevronRightIcon,
-  MessageSquare, Bookmark, FileText, Loader2, ChevronLeft, ChevronRight, Folder, FolderOpen
+  Search, Filter, BookOpen, ChevronDown, ChevronRight, ChevronLeft,
+  MessageSquare, Bookmark, FileText, Loader2, Folder
 } from 'lucide-react';
 import Sidebar from './Sidebar';
 import RenderBlocos from '../components/RenderBlocos';
@@ -18,11 +18,12 @@ export default function BancoQuestoes() {
   const [assuntoIdSelecionado, setAssuntoIdSelecionado] = useState('');
   const [pagina, setPagina] = useState(0);
 
-  // Estados para a árvore de assuntos na barra lateral
+  const [favoritado, setFavoritado] = useState(false);
+  const [categoriasAbertas, setCategoriasAbertas] = useState({});
   const [assuntosArvore, setAssuntosArvore] = useState([]);
   const [turmaIdAluno, setTurmaIdAluno] = useState(null);
+  const [questoesEmbaralhadas, setQuestoesEmbaralhadas] = useState([]);
 
-  // Descobre a turma do aluno logado e puxa a árvore de assuntos correspondente
   useEffect(() => {
     async function carregarFiltrosArvore() {
       const { data: { user } } = await supabase.auth.getUser();
@@ -43,21 +44,47 @@ export default function BancoQuestoes() {
           .eq('turma_id', profile.turma_id)
           .order('created_at', { ascending: true });
 
-        if (arvore) setAssuntosArvore(arvore);
+        if (arvore) {
+          setAssuntosArvore(arvore);
+          const idsIniciais = {};
+          arvore.filter(a => !a.categoria_pai_id).forEach(p => { idsIniciais[p.id] = true; });
+          setCategoriasAbertas(idsIniciais);
+        }
       }
     }
     carregarFiltrosArvore();
   }, []);
 
+  const toggleCategoria = (id) => {
+    setCategoriasAbertas(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
   const { questoes, total, loading, error, responder } = useQuestoes({
     busca,
     dificuldade,
     assuntoId: assuntoIdSelecionado,
-    pagina,
-    porPagina: 1,
+    pagina: 0,
+    porPagina: 500,
   });
 
-  const questaoAtual = questoes[0];
+  useEffect(() => {
+    if (questoes && questoes.length > 0) {
+      const embaralhadas = [...questoes].sort(() => Math.random() - 0.5);
+      setQuestoesEmbaralhadas(embaralhadas);
+      setPagina(0);
+    } else {
+      setQuestoesEmbaralhadas([]);
+    }
+  }, [questoes]);
+
+  const questaoAtual = questoesEmbaralhadas[pagina];
+
+  const alternarFavorito = () => {
+    setFavoritado(!favoritado);
+  };
 
   const handleResponder = async () => {
     if (!respostaSelecionada || !questaoAtual) return;
@@ -70,11 +97,12 @@ export default function BancoQuestoes() {
   };
 
   const irParaProxima = () => {
-    setPagina((p) => p + 1);
+    setPagina((p) => Math.min(questoesEmbaralhadas.length - 1, p + 1));
     setRespostaSelecionada(null);
     setRespondida(false);
     setGabaritoRevelado(false);
     setMostrarComentario(false);
+    setFavoritado(false);
   };
 
   const irParaAnterior = () => {
@@ -83,21 +111,17 @@ export default function BancoQuestoes() {
     setRespondida(false);
     setGabaritoRevelado(false);
     setMostrarComentario(false);
+    setFavoritado(false);
   };
 
-  // Organiza pais e subitens da árvore
   const principais = assuntosArvore.filter(a => !a.categoria_pai_id);
   const getSub = (paiId) => assuntosArvore.filter(a => a.categoria_pai_id === paiId);
 
   return (
     <div className="flex h-screen bg-[#f3f4f6] font-sans overflow-hidden">
-
       <Sidebar />
 
-      {/* ÁREA PRINCIPAL */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
-
-        {/* HEADER */}
         <header className="h-16 bg-white border-b border-slate-200 px-6 md:px-8 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-orange-50 text-brand-orange rounded-xl flex items-center justify-center shrink-0">
@@ -106,20 +130,18 @@ export default function BancoQuestoes() {
             <div>
               <h2 className="text-lg font-black text-slate-900 leading-tight">Banco de Questões</h2>
               <p className="text-xs font-medium text-slate-500">
-                {total > 0 ? `${total} questões disponíveis` : 'Nenhuma questão cadastrada ainda'}
+                {total > 0 ? `${total} questões disponíveis ` : 'Nenhuma questão cadastrada ainda'}
               </p>
             </div>
           </div>
 
-          <div className="w-9 h-9 bg-slate-900 rounded-full flex items-center justify-center text-white font-bold text-xs cursor-pointer hover:bg-slate-800 transition-colors">
+          <div className="w-9 h-9 bg-slate-900 rounded-full flex items-center justify-center text-white font-bold text-xs cursor-pointer">
             C
           </div>
         </header>
 
-        {/* CONTEÚDO: FILTROS + QUESTÕES */}
         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
-
-          {/* BARRA LATERAL DE FILTROS */}
+          {/* BARRA DE FILTROS */}
           <div className="w-full md:w-72 bg-white border-r border-slate-200 overflow-y-auto shrink-0 p-5 flex flex-col gap-6">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
@@ -144,7 +166,6 @@ export default function BancoQuestoes() {
               />
             </div>
 
-            {/* Filtro por Árvore de Assuntos / Categorias */}
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2.5">
                 Categorias e Assuntos
@@ -158,35 +179,89 @@ export default function BancoQuestoes() {
                 >
                   📁 Todos os Assuntos
                 </button>
+
                 {principais.map((pai) => {
-                  const subitens = getSub(pai.id);
+                  const subitensNivel1 = getSub(pai.id);
+                  const isOpenPai = categoriasAbertas[pai.id];
                   const isPaiSelecionado = assuntoIdSelecionado === pai.id;
+
                   return (
                     <div key={pai.id} className="space-y-1">
-                      <button
-                        onClick={() => { setAssuntoIdSelecionado(pai.id); setPagina(0); }}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer ${
-                          isPaiSelecionado ? 'bg-orange-50 text-brand-orange' : 'text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <Folder className="w-3.5 h-3.5 text-brand-orange shrink-0" />
-                        <span className="truncate">{pai.nome}</span>
-                      </button>
-                      {subitens.map((sub) => {
-                        const isSubSelecionado = assuntoIdSelecionado === sub.id;
-                        return (
+                      <div className={`flex items-center justify-between px-2 py-1.5 rounded-lg transition-colors ${
+                        isPaiSelecionado ? 'bg-orange-50 text-brand-orange' : 'hover:bg-slate-50 text-slate-700'
+                      }`}>
+                        <button
+                          onClick={() => { setAssuntoIdSelecionado(pai.id); setPagina(0); }}
+                          className="flex items-center gap-1.5 text-xs font-bold flex-1 text-left cursor-pointer truncate uppercase"
+                        >
+                          <Folder className="w-3.5 h-3.5 text-brand-orange shrink-0" />
+                          <span className="truncate">{pai.nome}</span>
+                        </button>
+                        
+                        {subitensNivel1.length > 0 && (
                           <button
-                            key={sub.id}
-                            onClick={() => { setAssuntoIdSelecionado(sub.id); setPagina(0); }}
-                            className={`w-full text-left pl-7 pr-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 cursor-pointer ${
-                              isSubSelecionado ? 'bg-orange-50 text-brand-orange font-bold' : 'text-slate-500 hover:bg-slate-50'
-                            }`}
+                            onClick={() => toggleCategoria(pai.id)}
+                            className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
                           >
-                            <span>↳</span>
-                            <span className="truncate">{sub.nome}</span>
+                            {isOpenPai ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                           </button>
-                        );
-                      })}
+                        )}
+                      </div>
+
+                      {isOpenPai && subitensNivel1.length > 0 && (
+                        <div className="pl-3 space-y-1 border-l-2 border-slate-100 ml-3 my-1">
+                          {subitensNivel1.map((sub1) => {
+                            const subitensNivel2 = getSub(sub1.id);
+                            const isOpenSub1 = categoriasAbertas[sub1.id];
+                            const isSub1Selecionado = assuntoIdSelecionado === sub1.id;
+
+                            return (
+                              <div key={sub1.id} className="space-y-1">
+                                <div className={`flex items-center justify-between px-2 py-1 rounded-md transition-colors ${
+                                  isSub1Selecionado ? 'bg-orange-50 text-brand-orange font-bold' : 'hover:bg-slate-50 text-slate-600'
+                                }`}>
+                                  <button
+                                    onClick={() => { setAssuntoIdSelecionado(sub1.id); setPagina(0); }}
+                                    className="flex items-center gap-1 text-xs flex-1 text-left cursor-pointer truncate font-medium"
+                                  >
+                                    <span className="text-slate-400">📂</span>
+                                    <span className="truncate">{sub1.nome}</span>
+                                  </button>
+
+                                  {subitensNivel2.length > 0 && (
+                                    <button
+                                      onClick={() => toggleCategoria(sub1.id)}
+                                      className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                                    >
+                                      {isOpenSub1 ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                    </button>
+                                  )}
+                                </div>
+
+                                {isOpenSub1 && subitensNivel2.length > 0 && (
+                                  <div className="pl-4 space-y-1 border-l border-slate-100 ml-2 my-1">
+                                    {subitensNivel2.map((sub2) => {
+                                      const isSub2Selecionado = assuntoIdSelecionado === sub2.id;
+                                      return (
+                                        <button
+                                          key={sub2.id}
+                                          onClick={() => { setAssuntoIdSelecionado(sub2.id); setPagina(0); }}
+                                          className={`w-full text-left px-2 py-1 rounded text-xs transition-colors cursor-pointer truncate flex items-center gap-1.5 ${
+                                            isSub2Selecionado ? 'bg-orange-50 text-brand-orange font-bold' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                                          }`}
+                                        >
+                                          <span className="text-slate-300">📄</span>
+                                          <span className="truncate">{sub2.nome}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -223,7 +298,6 @@ export default function BancoQuestoes() {
           {/* ÁREA DA QUESTÃO */}
           <div className="flex-1 overflow-y-auto p-6 md:p-8">
             <div className="max-w-3xl mx-auto space-y-5 pb-12">
-
               {loading && (
                 <div className="flex items-center justify-center py-20 text-slate-400 gap-2">
                   <Loader2 className="w-5 h-5 animate-spin" /> Carregando questão...
@@ -236,7 +310,7 @@ export default function BancoQuestoes() {
                 </div>
               )}
 
-              {!loading && !error && total === 0 && (
+              {!loading && !error && questoesEmbaralhadas.length === 0 && (
                 <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center">
                   <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3" />
                   <h3 className="font-bold text-slate-700 mb-1">Nenhuma questão por aqui ainda</h3>
@@ -248,7 +322,7 @@ export default function BancoQuestoes() {
                 <>
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-bold text-slate-500">
-                      Questão <span className="text-slate-900">{pagina + 1}</span> de {total}
+                      Questão <span className="text-slate-900">{pagina + 1}</span> de {questoesEmbaralhadas.length} <span className="text-xs text-orange-500 font-bold ml-1"></span>
                     </p>
                   </div>
 
@@ -267,50 +341,46 @@ export default function BancoQuestoes() {
                           </span>
                         )}
                       </div>
-                      <button className="text-slate-400 hover:text-brand-orange transition-colors cursor-pointer">
-                        <Bookmark className="w-4.5 h-4.5" />
+                      <button
+                        onClick={alternarFavorito}
+                        className={`transition-colors cursor-pointer ${favoritado ? 'text-brand-orange' : 'text-slate-400 hover:text-brand-orange'}`}
+                        title={favoritado ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
+                      >
+                        <Bookmark className="w-4.5 h-4.5" fill={favoritado ? 'currentColor' : 'none'} />
                       </button>
                     </div>
 
                     <div
-                      className="p-6 md:p-8 select-none"
+                      className="p-6 md:p-8 select-none space-y-4"
                       onCopy={(e) => e.preventDefault()}
                       onContextMenu={(e) => e.preventDefault()}
                     >
-                      {/* 1. Enunciado Superior (Texto Inicial) */}
-                      {questaoAtual.blocos_enunciado_superior && questaoAtual.blocos_enunciado_superior.length > 0 ? (
-                        <div className="text-slate-800 font-medium leading-relaxed mb-4 text-justify">
-                          <RenderBlocos blocos={questaoAtual.blocos_enunciado_superior} />
-                        </div>
-                      ) : (
-                        <div className="text-slate-800 font-medium leading-relaxed mb-4 text-justify">
+                      {/* ENUNCIADO SEGURO (Exibe blocos ou texto puro caso venham em colunas diferentes) */}
+                      {questaoAtual.blocos_enunciado && questaoAtual.blocos_enunciado.length > 0 ? (
+                        <div className="text-slate-800 font-medium leading-relaxed text-justify">
                           <RenderBlocos blocos={questaoAtual.blocos_enunciado} />
                         </div>
-                      )}
+                      ) : questaoAtual.enunciado ? (
+                        <p className="text-slate-800 font-medium leading-relaxed text-justify whitespace-pre-wrap">
+                          {questaoAtual.enunciado}
+                        </p>
+                      ) : null}
 
-                      {/* 2. Tabela / Gráfico / Imagem Principal Centralizada */}
+                      {/* Imagem / Gráfico Principal */}
                       {questaoAtual.imagem_url && (
-                        <div className="my-6 flex flex-col items-center justify-center">
+                        <div className="my-4 flex flex-col items-center justify-center">
                           <div className="p-3 bg-white border border-slate-200 rounded-2xl shadow-xs inline-block max-w-full">
                             <img
                               src={questaoAtual.imagem_url}
-                              alt="Tabela ou Gráfico da Questão"
+                              alt="Gráfico ou Tabela"
                               className="max-h-72 w-auto object-contain rounded-xl mx-auto"
                             />
                           </div>
                         </div>
                       )}
 
-                      {/* 3. Enunciado Inferior / Comando Final */}
-                      {questaoAtual.blocos_enunciado_inferior && questaoAtual.blocos_enunciado_inferior.length > 0 && (
-                        <div className="text-slate-800 font-medium leading-relaxed my-4 text-justify">
-                          <RenderBlocos blocos={questaoAtual.blocos_enunciado_inferior} />
-                        </div>
-                      )}
-
-                      {/* Alternativas */}
-                      <div className="space-y-3 mt-6">
-                        {questaoAtual.alternativas.map((alt) => (
+                      <div className="space-y-3 pt-2">
+                        {questaoAtual.alternativas?.map((alt) => (
                           <button
                             key={alt.letra}
                             disabled={respondida}
@@ -379,31 +449,13 @@ export default function BancoQuestoes() {
                     </div>
 
                     {gabaritoRevelado && mostrarComentario && (questaoAtual.comentario || questaoAtual.video_resolucao_url || questaoAtual.resolucao_video_url) && (
-                      <div
-                        className="px-6 py-5 bg-orange-50/60 border-t border-orange-100 select-none space-y-4"
-                        onCopy={(e) => e.preventDefault()}
-                        onContextMenu={(e) => e.preventDefault()}
-                      >
+                      <div className="px-6 py-5 bg-orange-50/60 border-t border-orange-100 select-none space-y-4">
                         <div className="flex items-center gap-2">
                           <div className="w-6 h-6 bg-brand-orange rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0">
                             P
                           </div>
                           <h4 className="font-black text-slate-800 text-sm">Resolução do Professor</h4>
                         </div>
-
-                        {(questaoAtual.video_resolucao_url || questaoAtual.resolucao_video_url) && (
-                          <div className="aspect-video bg-black rounded-xl overflow-hidden border border-orange-200 shadow-md">
-                            <iframe
-                              className="w-full h-full"
-                              src={questaoAtual.video_resolucao_url || questaoAtual.resolucao_video_url}
-                              title="Vídeo de resolução"
-                              frameBorder="0"
-                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                              allowFullScreen
-                            ></iframe>
-                          </div>
-                        )}
-
                         {questaoAtual.comentario && (
                           <p className="text-sm text-slate-700 font-medium leading-relaxed text-justify whitespace-pre-wrap">
                             {questaoAtual.comentario}
@@ -424,10 +476,8 @@ export default function BancoQuestoes() {
                   </div>
                 </>
               )}
-
             </div>
           </div>
-
         </div>
       </main>
     </div>

@@ -8,17 +8,6 @@ import { criarBloco, processarBlocos, blocosParaTexto } from '../lib/blocos';
 
 const LETRAS = ['A', 'B', 'C', 'D', 'E'];
 
-// Função interna para formatar a URL do vídeo de resolução do YouTube
-const formatarUrlVideo = (url) => {
-  if (!url) return '';
-  if (url.includes('embed')) return url;
-  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
-  if (match && match[1]) {
-    return `https://www.youtube.com/embed/${match[1]}`;
-  }
-  return url;
-};
-
 export default function AdminNovaQuestao() {
   const [turmas, setTurmas] = useState([]);
   const [assuntosArvore, setAssuntosArvore] = useState([]);
@@ -28,7 +17,6 @@ export default function AdminNovaQuestao() {
   const [turmaId, setTurmaId] = useState('');
   const [materia, setMateria] = useState('');
   const [assuntoId, setAssuntoId] = useState(''); 
-  const [assuntoTexto, setAssuntoTexto] = useState('');
   const [dificuldade, setDificuldade] = useState('medio');
   const [comentario, setComentario] = useState('');
   const [videoResolucaoUrl, setVideoResolucaoUrl] = useState('');
@@ -36,17 +24,15 @@ export default function AdminNovaQuestao() {
   const [ano, setAno] = useState(new Date().getFullYear());
   const [banca, setBanca] = useState('Inédita');
 
-  // Enunciado Superior (Texto antes da tabela/gráfico)
+  // Enunciado dividido em 3 partes estilo ENEM: Superior -> Imagem no Meio -> Inferior
   const [blocosEnunciadoSuperior, setBlocosEnunciadoSuperior] = useState([criarBloco('texto')]);
+  const [blocosEnunciadoInferior, setBlocosEnunciadoInferior] = useState([]);
 
-  // Gráfico / Tabela principal em destaque centralizada (Fica no meio)
+  // Gráfico / Imagem principal no meio
   const [imagemPrincipalFile, setImagemPrincipalFile] = useState(null);
   const [imagemPrincipalPreview, setImagemPrincipalPreview] = useState(null);
 
-  // Enunciado Inferior (Texto / Comando após a tabela/gráfico)
-  const [blocosEnunciadoInferior, setBlocosEnunciadoInferior] = useState([]);
-
-  // Cada alternativa possui seus próprios blocos de texto/imagem
+  // Alternativas
   const [alternativasBlocos, setAlternativasBlocos] = useState(() =>
     Object.fromEntries(LETRAS.map((letra) => [letra, [criarBloco('texto')]]))
   );
@@ -60,7 +46,6 @@ export default function AdminNovaQuestao() {
     });
   }, []);
 
-  // Busca a árvore de assuntos sempre que a turma mudar
   useEffect(() => {
     if (turmaId) {
       supabase
@@ -88,6 +73,16 @@ export default function AdminNovaQuestao() {
     setImagemPrincipalPreview(null);
   };
 
+  const formatarUrlVideo = (url) => {
+    if (!url) return '';
+    if (url.includes('embed')) return url;
+    const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+    if (match && match[1]) {
+      return `https://www.youtube.com/embed/${match[1]}`;
+    }
+    return url;
+  };
+
   const resetarFormulario = () => {
     setBlocosEnunciadoSuperior([criarBloco('texto')]);
     setBlocosEnunciadoInferior([]);
@@ -96,27 +91,24 @@ export default function AdminNovaQuestao() {
     setComentario('');
     setVideoResolucaoUrl('');
     setAssuntoId('');
-    setAssuntoTexto('');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!assuntoId) return alert('Selecione um assunto da árvore hierárquica.');
+    if (!materia.trim()) return alert('Preencha o campo Matéria.');
 
     setLoading(true);
     setSucesso(false);
 
     try {
-      // 1. Sobe os blocos superiores e inferiores
+      // 1. Processa blocos superiores e inferiores
       const blocosSupProntos = await processarBlocos(supabase, blocosEnunciadoSuperior, turmaId, 'enunciado-sup');
       const blocosInfProntos = blocosEnunciadoInferior.length > 0 
-        ? await processarBlocos(supabase, blocosEnunciadoInferior, turmaId, 'enunciado-inf')
+        ? await processarBlocos(supabase, blocosEnunciadoInferior, turmaId, 'enunciado-inf') 
         : [];
 
-      // Junta todos os blocos para compatibilidade com o campo geral "enunciado" e "blocos_enunciado"
-      const todosBlocosUnificados = [...blocosSupProntos, ...blocosInfProntos];
-
-      // 2. Sobe a imagem principal / quadro estatístico ou gráfico em destaque, se houver
+      // 2. Sobe a imagem do meio (principal)
       let imagemPrincipalUrl = null;
       if (imagemPrincipalFile) {
         const fileExt = imagemPrincipalFile.name.split('.').pop();
@@ -127,7 +119,7 @@ export default function AdminNovaQuestao() {
         imagemPrincipalUrl = data.publicUrl;
       }
 
-      // 3. Sobe as imagens de cada alternativa
+      // 3. Processa alternativas
       const alternativasFormatadas = await Promise.all(
         LETRAS.map(async (letra) => {
           const blocosProntos = await processarBlocos(supabase, alternativasBlocos[letra], turmaId, `alt-${letra}`);
@@ -140,39 +132,40 @@ export default function AdminNovaQuestao() {
       );
 
       const urlVideoFormatada = formatarUrlVideo(videoResolucaoUrl);
-
-      // Pega o nome do assunto selecionado
       const assuntoSelecionadoObj = assuntosArvore.find(a => a.id === assuntoId);
-      const nomeAssuntoFinal = assuntoSelecionadoObj ? assuntoSelecionadoObj.nome : assuntoTexto;
+      const nomeAssuntoFinal = assuntoSelecionadoObj ? assuntoSelecionadoObj.nome : 'Geral';
 
-      const { error } = await supabase.from('questoes').insert([{
+      const dadosQuestao = {
         turma_id: turmaId,
-        materia,
+        materia: materia.trim(),
         assunto: nomeAssuntoFinal,
-        assunto_id: assuntoId,
+        assunto_id: assuntoId, 
         dificuldade,
-        enunciado: blocosParaTexto(todosBlocosUnificados),
-        blocos_enunciado: todosBlocosUnificados,
+        enunciado: blocosParaTexto(blocosSupProntos), // Mantém compatibilidade
+        blocos_enunciado: blocosSupProntos,
         blocos_enunciado_superior: blocosSupProntos,
         blocos_enunciado_inferior: blocosInfProntos,
         imagem_url: imagemPrincipalUrl,
         alternativas: alternativasFormatadas,
         resposta_correta: respostaCorreta,
-        comentario,
-        video_resolucao_url: urlVideoFormatada,
-        ano: parseInt(ano),
-        banca,
-      }]);
+        comentario: comentario.trim() || null,
+        video_resolucao_url: urlVideoFormatada || null,
+        ano: ano ? parseInt(ano) : null,
+        banca: banca.trim() || 'Inédita',
+      };
+
+      const { error } = await supabase.from('questoes').insert([dadosQuestao]);
 
       if (error) throw error;
 
       setSucesso(true);
       resetarFormulario();
-      setTimeout(() => setSucesso(false), 3000);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setTimeout(() => setSucesso(false), 4000);
 
     } catch (error) {
-      console.error('Erro ao salvar questão:', error.message);
-      alert('Erro ao salvar a questão. Verifique o console.');
+      console.error('Erro detalhado ao salvar questão:', error);
+      alert('Erro ao salvar a questão: ' + (error.message || 'Erro desconhecido.'));
     } finally {
       setLoading(false);
     }
@@ -196,14 +189,14 @@ export default function AdminNovaQuestao() {
           <div>
             <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">
               <PlusCircle className="w-6 h-6 text-brand-orange" />
-              Adicionar Nova Questão
+              Adicionar Nova Questão (Modelo ENEM)
             </h1>
-            <p className="text-sm text-slate-500 font-medium mt-1">Layout clássico de prova: Texto Superior ➔ Tabela/Gráfico Central ➔ Texto Inferior.</p>
+            <p className="text-sm text-slate-500 font-medium mt-1">Texto superior, imagem/tabela no meio e texto explicativo inferior.</p>
           </div>
         </div>
 
         {sucesso && (
-          <div className="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-700 p-4 rounded-xl flex items-center gap-3 font-bold">
+          <div className="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-700 p-4 rounded-xl flex items-center gap-3 font-bold shadow-xs">
             <CheckCircle2 className="w-6 h-6" />
             Questão salva com sucesso no banco de dados!
           </div>
@@ -212,7 +205,7 @@ export default function AdminNovaQuestao() {
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_420px] gap-6 items-start">
 
           {/* FORMULÁRIO */}
-          <form onSubmit={handleSubmit} className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200 space-y-8">
+          <form onSubmit={handleSubmit} className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200 space-y-8 shadow-xs">
 
             {/* Classificação */}
             <div>
@@ -220,7 +213,7 @@ export default function AdminNovaQuestao() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">Turma / Nicho</label>
-                  <select value={turmaId} onChange={(e) => setTurmaId(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium cursor-pointer">
+                  <select value={turmaId} onChange={(e) => setTurmaId(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium">
                     {turmas.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
                   </select>
                 </div>
@@ -236,17 +229,25 @@ export default function AdminNovaQuestao() {
                     required 
                     value={assuntoId} 
                     onChange={(e) => setAssuntoId(e.target.value)} 
-                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium text-slate-700 cursor-pointer"
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium text-slate-700"
                   >
                     <option value="">Selecione a categoria/subcategoria...</option>
                     {principais.map(pai => {
-                      const subitens = getSub(pai.id);
+                      const subitensNivel1 = getSub(pai.id);
                       return (
                         <React.Fragment key={pai.id}>
                           <option value={pai.id} className="font-bold">📁 {pai.nome}</option>
-                          {subitens.map(sub => (
-                            <option key={sub.id} value={sub.id}>&nbsp;&nbsp;&nbsp;&nbsp;↳ {sub.nome}</option>
-                          ))}
+                          {subitensNivel1.map(sub1 => {
+                            const subitensNivel2 = getSub(sub1.id);
+                            return (
+                              <React.Fragment key={sub1.id}>
+                                <option value={sub1.id}>&nbsp;&nbsp;&nbsp;&nbsp;📂 {sub1.nome}</option>
+                                {subitensNivel2.map(sub2 => (
+                                  <option key={sub2.id} value={sub2.id}>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;📄 {sub2.nome}</option>
+                                ))}
+                              </React.Fragment>
+                            );
+                          })}
                         </React.Fragment>
                       );
                     })}
@@ -257,7 +258,7 @@ export default function AdminNovaQuestao() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">Dificuldade</label>
-                  <select value={dificuldade} onChange={(e) => setDificuldade(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium cursor-pointer">
+                  <select value={dificuldade} onChange={(e) => setDificuldade(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium">
                     <option value="facil">Fácil</option>
                     <option value="medio">Médio</option>
                     <option value="dificil">Difícil</option>
@@ -274,27 +275,27 @@ export default function AdminNovaQuestao() {
               </div>
             </div>
 
-            {/* 1. Enunciado Superior (Texto Inicial) */}
+            {/* 1. ENUNCIADO SUPERIOR */}
             <div>
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1 border-b border-slate-100 pb-2">1. Enunciado (Texto Superior / Introdução)</h3>
-              <p className="text-xs text-slate-500 mb-3">Insira o texto introdutório que fica <b>acima</b> da tabela ou gráfico.</p>
+              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1 border-b border-slate-100 pb-2">1. Enunciado Superior (Introdução / Contexto)</h3>
+              <p className="text-xs text-slate-500 mb-3">Texto que vem antes do gráfico ou da tabela.</p>
               <BlocoEditor blocos={blocosEnunciadoSuperior} onChange={setBlocosEnunciadoSuperior} />
             </div>
 
-            {/* 2. Tabela / Gráfico / Imagem Central */}
+            {/* 2. GRÁFICO / TABELA NO MEIO */}
             <div>
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">2. Tabela / Gráfico / Imagem Central (Opcional)</h3>
-              <p className="text-xs text-slate-500 mb-3">Exibido em destaque centralizado exatamente no meio do enunciado — padrão exato de provas do ENEM.</p>
+              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">2. Gráfico / Tabela Central (No Meio)</h3>
+              <p className="text-xs text-slate-500 mb-3">Exibido exatamente no centro, entre o texto superior e a pergunta final.</p>
               <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl p-4 text-center">
                 {!imagemPrincipalPreview ? (
                   <label className="cursor-pointer flex flex-col items-center justify-center py-4">
                     <ImagePlus className="w-8 h-8 text-slate-400 mb-2" />
-                    <span className="text-xs font-bold text-slate-700">Clique para enviar a tabela ou gráfico principal</span>
+                    <span className="text-xs font-bold text-slate-700">Clique para enviar a tabela ou gráfico central</span>
                     <input type="file" accept="image/*" onChange={handleImagemPrincipalChange} className="hidden" />
                   </label>
                 ) : (
                   <div className="relative inline-block">
-                    <img src={imagemPrincipalPreview} alt="Tabela Principal" className="max-h-48 mx-auto rounded-xl border bg-white p-2 object-contain shadow-xs" />
+                    <img src={imagemPrincipalPreview} alt="Central" className="max-h-56 mx-auto rounded-xl border bg-white p-1 object-contain" />
                     <button type="button" onClick={removerImagemPrincipal} className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1.5 shadow transition-colors cursor-pointer">
                       <X className="w-4 h-4" />
                     </button>
@@ -303,11 +304,11 @@ export default function AdminNovaQuestao() {
               </div>
             </div>
 
-            {/* 3. Enunciado Inferior (Texto / Comando final) */}
+            {/* 3. ENUNCIADO INFERIOR */}
             <div>
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1 border-b border-slate-100 pb-2">3. Enunciado (Texto Inferior / Comando Final - Opcional)</h3>
-              <p className="text-xs text-slate-500 mb-3">Insira o texto ou comando que fica <b>abaixo</b> da tabela (ex: "Utilizando os dados acima, assinale...").</p>
-              <BlocoEditor blocos={blocosEnunciadoInferior} onChange={setBlocosEnunciadoInferior} />
+              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1 border-b border-slate-100 pb-2">3. Enunciado Inferior (Pergunta / Comando Final - Opcional)</h3>
+              <p className="text-xs text-slate-500 mb-3">Texto que aparece logo abaixo da tabela/gráfico fazendo a pergunta da questão.</p>
+              <BlocoEditor blocos={blocosEnunciadoInferior} onChange={setBlocosEnunciadoInferior} placeholder="Ex: A mediana dessa distribuição é igual a..." />
             </div>
 
             {/* Alternativas */}
@@ -342,13 +343,13 @@ export default function AdminNovaQuestao() {
               </div>
             </div>
 
-            {/* Comentário e Vídeo de Resolução */}
+            {/* Comentário e Vídeo */}
             <div className="space-y-4">
               <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">Resolução da Questão</h3>
               
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1.5">
-                  <Video className="w-4 h-4 text-brand-orange" /> Link do Vídeo de Resolução (YouTube - Opcional)
+                  <Video className="w-4 h-4 text-brand-orange" /> Link do Vídeo de Resolução (YouTube / Embed - Opcional)
                 </label>
                 <input 
                   type="text" 
@@ -372,7 +373,7 @@ export default function AdminNovaQuestao() {
             </div>
 
             <div className="pt-4 flex justify-end">
-              <button disabled={loading} type="submit" className="flex items-center gap-2 px-8 py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold transition-all disabled:opacity-70 cursor-pointer">
+              <button disabled={loading} type="submit" className="flex items-center gap-2 px-8 py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold transition-all disabled:opacity-70 cursor-pointer shadow-md">
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
                 {loading ? 'Salvando...' : 'Salvar Questão'}
               </button>
@@ -380,7 +381,7 @@ export default function AdminNovaQuestao() {
 
           </form>
 
-          {/* PREVIEW AO VIVO (Estilo Prova Oficial) */}
+          {/* PREVIEW AO VIVO */}
           <div className="xl:sticky xl:top-8">
             <div className="flex items-center gap-2 mb-3 px-1">
               <Eye className="w-4 h-4 text-slate-400" />
@@ -394,30 +395,27 @@ export default function AdminNovaQuestao() {
                 <span className="text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md capitalize">{dificuldade}</span>
               </div>
 
-              <div className="p-5">
-                {/* 1. Texto Superior */}
-                <div className="text-slate-800 font-medium leading-relaxed mb-4 text-justify">
+              <div className="p-5 space-y-4">
+                {/* 1. Enunciado Superior */}
+                <p className="text-slate-800 font-medium leading-relaxed text-justify">
                   <RenderBlocos blocos={blocosEnunciadoSuperior} placeholder="O texto superior aparece aqui..." />
-                </div>
+                </p>
 
-                {/* 2. Imagem / Tabela Principal Centralizada no Meio */}
+                {/* 2. Imagem / Tabela no Meio */}
                 {imagemPrincipalPreview && (
-                  <div className="my-6 flex flex-col items-center justify-center">
-                    <div className="p-3 bg-white border border-slate-200 rounded-2xl shadow-xs inline-block max-w-full">
-                      <img src={imagemPrincipalPreview} alt="Tabela Principal" className="max-h-64 w-auto object-contain rounded-xl mx-auto" />
-                    </div>
+                  <div className="my-2 flex justify-center">
+                    <img src={imagemPrincipalPreview} alt="Tabela ou Gráfico Central" className="rounded-xl border border-slate-200 max-h-64 object-contain bg-white p-1" />
                   </div>
                 )}
 
-                {/* 3. Texto Inferior / Comando Final */}
+                {/* 3. Enunciado Inferior */}
                 {blocosEnunciadoInferior.length > 0 && (
-                  <div className="text-slate-800 font-medium leading-relaxed my-4 text-justify">
-                    <RenderBlocos blocos={blocosEnunciadoInferior} />
-                  </div>
+                  <p className="text-slate-800 font-medium leading-relaxed text-justify">
+                    <RenderBlocos blocos={blocosEnunciadoInferior} placeholder="A pergunta final aparece aqui..." />
+                  </p>
                 )}
 
-                {/* Alternativas */}
-                <div className="space-y-2.5 mt-6">
+                <div className="space-y-2.5 pt-2">
                   {LETRAS.map((letra) => (
                     <div
                       key={letra}
@@ -430,7 +428,7 @@ export default function AdminNovaQuestao() {
                       }`}>
                         {letra}
                       </div>
-                      <span className="font-medium text-sm text-slate-700 flex-1">
+                      <span className="font-medium text-sm text-slate-700">
                         <RenderBlocos blocos={alternativasBlocos[letra]} imgHeight="h-8" placeholder={`Alternativa ${letra}`} />
                       </span>
                     </div>

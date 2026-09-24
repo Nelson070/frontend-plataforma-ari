@@ -208,6 +208,7 @@ export default function AdminEditarQuestao() {
   const assuntoSelecionadoObj = assuntosArvore.find(a => a.id === assuntoId);
   const previewVideoUrlFormatado = formatarUrlVideo(videoResolucaoUrl);
 
+  // Mapeamento multinível para o select (Nível 1 ➔ Nível 2 ➔ Nível 3)
   const principais = assuntosArvore.filter(a => !a.categoria_pai_id);
   const getSub = (paiId) => assuntosArvore.filter(a => a.categoria_pai_id === paiId);
 
@@ -260,15 +261,31 @@ export default function AdminEditarQuestao() {
                     onChange={(e) => setAssuntoId(e.target.value)} 
                     className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-brand-orange font-medium text-slate-700 cursor-pointer"
                   >
-                    <option value="">Selecione a categoria...</option>
+                    <option value="">Selecione o assunto final...</option>
                     {principais.map(pai => {
-                      const subitens = getSub(pai.id);
+                      const subitensNivel1 = getSub(pai.id);
                       return (
                         <React.Fragment key={pai.id}>
-                          <option value={pai.id} className="font-bold">📁 {pai.nome}</option>
-                          {subitens.map(sub => (
-                            <option key={sub.id} value={sub.id}>&nbsp;&nbsp;&nbsp;&nbsp;↳ {sub.nome}</option>
-                          ))}
+                          <option disabled className="font-black text-slate-900 bg-slate-100">📁 {pai.nome.toUpperCase()}</option>
+                          {subitensNivel1.map(sub1 => {
+                            const subitensNivel2 = getSub(sub1.id);
+                            return (
+                              <React.Fragment key={sub1.id}>
+                                <option disabled className="font-semibold text-slate-700">&nbsp;&nbsp;&nbsp;&nbsp;📂 {sub1.nome}</option>
+                                {subitensNivel2.length > 0 ? (
+                                  subitensNivel2.map(sub2 => (
+                                    <option key={sub2.id} value={sub2.id}>
+                                      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;📄 {sub2.nome}
+                                    </option>
+                                  ))
+                                ) : (
+                                  <option value={sub1.id}>
+                                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;📄 {sub1.nome} (Geral)
+                                  </option>
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
                         </React.Fragment>
                       );
                     })}

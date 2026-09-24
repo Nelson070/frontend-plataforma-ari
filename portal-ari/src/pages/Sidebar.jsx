@@ -1,18 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabaseClient';
 import {
   LayoutDashboard, FileText, ListOrdered, Target, PlayCircle, Radio, TrendingUp,
-  Trophy, LogOut, Calendar,
+  Trophy, LogOut, Calendar, AlertCircle, Bookmark,
 } from 'lucide-react';
-
-// IMPORTANDO A LOGO AQUI 👇
 import logoAri from '../assets/logo-ari.jpeg';
+
+const NAV_ITEMS = [
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/banco-questoes', label: 'Banco de Questões', icon: FileText },
+  { to: '/assuntos-enem', label: 'Assuntos do ENEM', icon: ListOrdered },
+  { to: '/simulados', label: 'Simulados', icon: Target },
+  { to: '/player', label: 'Videoaulas', icon: PlayCircle },
+  { to: '/lives', label: 'Lives', icon: Radio },
+];
 
 const NAV_ITEMS_SECONDARY = [
   { to: '/desempenho', label: 'Meu Desempenho', icon: TrendingUp },
   { to: '/ranking', label: 'Ranking', icon: Trophy },
   { to: '/plano-estudos', label: 'Plano de Estudos', icon: Calendar },
+  { to: '/caderno-erros', label: 'Caderno de Erros', icon: AlertCircle },
+  { to: '/favoritos', label: 'Favoritos', icon: Bookmark },
 ];
 
 const navLinkClass = ({ isActive }) =>
@@ -24,61 +32,18 @@ const navLinkClass = ({ isActive }) =>
 
 export default function Sidebar() {
   const navigate = useNavigate();
-  const [isTurmaEnem, setIsTurmaEnem] = useState(false);
-
-  // Verifica se o aluno logado pertence à turma ENEM
-  useEffect(() => {
-    async function verificarTurmaEnem() {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('turmas(nome)')
-          .eq('id', user.id)
-          .single();
-
-        if (profile?.turmas?.nome) {
-          const nomeTurma = profile.turmas.nome.toLowerCase();
-          if (nomeTurma.includes('enem')) {
-            setIsTurmaEnem(true);
-          }
-        }
-      } catch (error) {
-        console.error('Erro ao verificar turma do aluno:', error);
-      }
-    }
-    verificarTurmaEnem();
-  }, []);
-
-  // Itens dinâmicos: se for turma ENEM, inclui "Assuntos do ENEM" na lista principal
-  const NAV_ITEMS = [
-    { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
-    { to: '/banco-questoes', label: 'Banco de Questões', icon: FileText },
-    ...(isTurmaEnem ? [{ to: '/assuntos-enem', label: 'Assuntos do ENEM', icon: ListOrdered }] : []),
-    { to: '/simulados', label: 'Simulados', icon: Target },
-    { to: '/player', label: 'Videoaulas', icon: PlayCircle },
-    { to: '/lives', label: 'Lives', icon: Radio },
-  ];
 
   return (
     <aside className="w-64 bg-slate-950 flex-col hidden lg:flex shrink-0">
-      
-      <div className="h-20 flex items-center px-6 border-b border-slate-800/60 gap-3">
-        <img 
-          src={logoAri} 
-          alt="Logo Arimatica Gabaritando" 
-          className="h-10 w-10 object-cover rounded-xl border border-brand-orange/50 shadow-md" 
+      <div className="h-16 flex items-center gap-2.5 px-6 border-b border-slate-800/60">
+        <img
+          src={logoAri}
+          alt="Aritmática Gabaritando"
+          className="w-8 h-8 rounded-lg object-cover shrink-0"
         />
-        <div className="flex flex-col">
-          <span className="text-sm font-black text-white tracking-wide leading-none mb-1">
-            ARIMATICA
-          </span>
-          <span className="text-[11px] font-black text-brand-orange tracking-widest leading-none">
-            GABARITANDO
-          </span>
-        </div>
+        <span className="text-sm font-black text-white tracking-wide leading-tight">
+          ARITMÁTICA <span className="text-brand-orange">GABARITANDO</span>
+        </span>
       </div>
 
       <nav className="flex-1 px-3 py-6 space-y-1 overflow-y-auto">
@@ -87,7 +52,7 @@ export default function Sidebar() {
         </p>
         {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
           <NavLink key={to} to={to} end={end} className={navLinkClass}>
-            <Icon className="w-5 h-5 mr-3 shrink-0" />
+            <Icon className="w-4.5 h-4.5 mr-3 shrink-0" />
             {label}
           </NavLink>
         ))}
@@ -97,7 +62,7 @@ export default function Sidebar() {
         </p>
         {NAV_ITEMS_SECONDARY.map(({ to, label, icon: Icon }) => (
           <NavLink key={to} to={to} className={navLinkClass}>
-            <Icon className="w-5 h-5 mr-3 shrink-0" />
+            <Icon className="w-4.5 h-4.5 mr-3 shrink-0" />
             {label}
           </NavLink>
         ))}
@@ -108,7 +73,7 @@ export default function Sidebar() {
           onClick={() => navigate('/')}
           className="flex items-center justify-center w-full py-2.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl font-semibold text-sm transition-colors"
         >
-          <LogOut className="w-5 h-5 mr-2" /> Sair
+          <LogOut className="w-4 h-4 mr-2" /> Sair
         </button>
       </div>
     </aside>
